@@ -68,13 +68,21 @@ sites_subset <- sites[, select_cols]
 
 
 ```{r}
+bat_count_cols <- c(
+    sprintf("%s.counts", names(bat_species_lookup)[1:length(bat_species_lookup) - 1]),
+    "ALL"
+)
 output_df <- sum_counts_by_year %>%
     left_join(
         sites_subset,
         by = join_by(x$site == y$AcousticSite),
         suffix = c(".counts", ".site")
+    ) %>% mutate(
+        mean_count = across(all_of(bat_count_cols), ~ .x / detectorNights)
     )
 
+# mutate(output_df, mean_count = across(all_of(bat_count_cols), ~ .x / detectorNights))
+# colnames(output_df)
 write.csv(
     output_df,
     file = "../data/bat_counts_and_sites.csv",
