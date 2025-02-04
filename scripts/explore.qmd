@@ -1,16 +1,19 @@
 ---
 title: "explore"
-format: html
+format: pdf
+bibliography: references.bib
 ---
 
-```{r}
+# Data Input
+
+```{r, echo=TRUE, warning=TRUE, message=FALSE}
 library(readxl)
 library(ggplot2)
 library(dplyr)
 library(lubridate)
 
-species_counts <- read_xlsx("./data/USFWS_Bat_Acoustic_Data/NightlyPassCounts.xlsx")
-sites <- read.csv("./data/Bat Detector Metadata/acoustic_sites.csv")
+species_counts <- read_xlsx("../data/USFWS_Bat_Acoustic_Data/NightlyPassCounts.xlsx")
+sites <- read.csv("../data/Bat Detector Metadata/acoustic_sites.csv")
 ```
 
 ```{r}
@@ -34,17 +37,88 @@ bat_species_lookup <- list(
 ```
 
 
-Get the sum of counts for each species by year and site.
+# EDA
+
+Get the sum of counts for each species by and site.
 
 ```{r}
 sum_counts_by_year <- species_counts %>%
-    group_by(site = AcousticSite, year = lubridate::year(NightOf)) %>%
+    group_by(site = AcousticSite) %>%
     summarize(across(all_of(names(bat_species_lookup)), ~ sum(.x, na.rm = TRUE)))
+
+head(sum_counts_by_year)
 ```
 
-Now, we merge in the site metadata.
+Now, we merge in the site metadata. This contains the site name, location (lat/lon), the number of detector nights
+by year, and which bat species the detector is set up to detect.
 
 ```{r}
-output_df <- sum_counts_by_year %>% left_join(sites, by = join_by(x$site == y$AcousticSite), suffix = c(".counts", ".site"))
-write.csv(output_df, file = "./data/bat_counts_and_sites.csv", row.names = FALSE)
+head(sites)
 ```
+
+Let's collapse all detector nights to be a single value across all years.
+```{r}
+sites$detectorNights <- rowSums(sites[, startsWith(colnames(sites), "X")])
+select_cols <- c(
+    "AcousticSite", "detectorNights", "Long", "Lat",
+    names(bat_species_lookup)[1:length(bat_species_lookup) - 1] # exclude "ALL"
+)
+sites_subset <- sites[, select_cols]
+```
+
+
+```{r}
+output_df <- sum_counts_by_year %>%
+    left_join(
+        sites_subset,
+        by = join_by(x$site == y$AcousticSite),
+        suffix = c(".counts", ".site")
+    )
+
+write.csv(
+    output_df,
+    file = "../data/bat_counts_and_sites.csv",
+    row.names = FALSE
+)
+```
+
+
+# Tasks
+
+* **Source of the data. Link, citation.**  
+  * US Fish and Wildlife Service Acoustic Bat dataset[@usfws_bat_acoustic_data].
+  * Data has been aggregated to be the sum of bat counts by species and year at each monitoring site.
+
+* **Overall data description (number of observations, number of variables)**
+
+* **Are there missing data? Is there a pattern or an intuitive reason for the missingness?**
+  * There is quite a bit of missing data - the sensors are only equipped to detect certain species of bats, and the sensors are only active for certain nights of the year.
+  * The number of nights is included, so we could normalize the data to be the mean number of bats of each species detected per night.
+
+* **What is in the dataset? Describe each column. Summary statistics. Correlation analysis (non-spatial is ok). Preliminary data analysis using methods that you know**
+
+* **Make summary figures based on non-spatial descriptive statistics**
+
+* **Describe the spatial component of the data: what is the spatial domain, its dimension, how are observations indexed in space? Do you think modeling covariance as decaying with distance is appropriate?**    
+  * The Great Lakes region is the spatial domain.
+  * Dimensions are $\mathcal{D}^2$, and observations are indexed by latitude and longitude.
+
+* **Visualize the empirical covariogram for the variable of interest. Does the variogram suggest spatial dependence in the data?**
+* **Map the data. Map the spatial variables, and write short but meaningful captions for your figures.**
+* **How do you imagine spatial dependence may play a role between the variables in the dataset?**
+  * There will be a large spatial dependendence in the count of bats for nearby detectors. I expect that because certain species each have limited ranges that are spatially determined by habitat factors, then the individual sensors are likely to pick up only certain bats, and therefore nearby sensors should see similar counts of bats.
+
+* **What are some research questions that these data could help answer (at least one for each dataset)?**
+    * Which bat species have the largest or most stable ranges in the Great Lakes?
+    * How have these counts for bats changed over time? We have a spatiotemporal dataset and can be much more granular if needed.
+    * Many of the monitoring stations are closer to the lakeshore - can we estimate the inland distribution of bats?
+
+* **Write an intuitive directed acyclic graphical model outlining the important variables, the parameters, and how they could be related to each other (no need for other assumptions – keep it simple)**
+
+* **What are the potential results that you may anticipate?**
+
+* **What are some potential pitfalls or shortcomings of your model?**
+
+* **What additional data could be useful for the purpose of your analysis?**
+
+# References
