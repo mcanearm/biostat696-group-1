@@ -1,0 +1,50 @@
+---
+title: "explore"
+format: html
+---
+
+```{r}
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+
+species_counts <- read_xlsx("./data/USFWS_Bat_Acoustic_Data/NightlyPassCounts.xlsx")
+sites <- read.csv("./data/Bat Detector Metadata/acoustic_sites.csv")
+```
+
+```{r}
+bat_species_lookup <- list(
+    "EPTFUS" = "Big Brown Bat (Eptesicus fuscus)",
+    "LASBOR" = "Eastern Red Bat(Lasiurus borealis) ",
+    "LASCIN" = "Hoary Bat (Lasiurus cinereus)",
+    "LASNOC" = "Silver-Haired Bat (Lasionycteris noctivagans)",
+    "MYOLUC" = "Little Brown Bat (Myotis lucifugus)",
+    "PERSUB" = "Tri-Colored Bat (Perimyotis subflavus)",
+    "MYOSEP" = "Northern Long-Eared Bat (Myotis septentrionalis)",
+    "MYOLEI" = "Eastern Small-Footed Bat (Myotis leibii)",
+    "NYCHUM" = "Evening Bat (Nycticeius humeralis)",
+    "MYOSOD" = "Indiana Bat (Myotis sodalis)",
+    "TADBRA" = "Mexican Free-Tailed Bat (Tadarida brasiliensis)",
+    "ANTPAL" = "Pallid Bat (Antrozous pallidus)",
+    "CORRAF" = "Rafinesque's Big-Eared Bat (Corynorhinus rafinesquii)",
+    "LASINT" = "Northern Yellow Bat (Lasiurus intermedius)",
+    "ALL" = "All Species"
+)
+```
+
+
+Get the sum of counts for each species by year and site.
+
+```{r}
+sum_counts_by_year <- species_counts %>%
+    group_by(site = AcousticSite, year = lubridate::year(NightOf)) %>%
+    summarize(across(all_of(names(bat_species_lookup)), ~ sum(.x, na.rm = TRUE)))
+```
+
+Now, we merge in the site metadata.
+
+```{r}
+output_df <- sum_counts_by_year %>% left_join(sites, by = join_by(x$site == y$AcousticSite), suffix = c(".counts", ".site"))
+write.csv(output_df, file = "./data/bat_counts_and_sites.csv", row.names = FALSE)
+```
