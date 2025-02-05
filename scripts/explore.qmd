@@ -13,7 +13,7 @@ library(dplyr)
 library(lubridate)
 
 species_counts <- read_xlsx("../data/USFWS_Bat_Acoustic_Data/NightlyPassCounts.xlsx")
-sites <- read.csv("../data/Bat Detector Metadata/acoustic_sites.csv")
+sites <- read.csv("../data/Bat_Detector_Metadata/acoustic_sites.csv")
 ```
 
 ```{r}
