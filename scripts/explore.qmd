@@ -7,13 +7,18 @@ bibliography: references.bib
 # Data Input
 
 ```{r, echo=TRUE, warning=TRUE, message=FALSE}
+here::i_am("scripts/explore.qmd")
+
 library(readxl)
 library(ggplot2)
 library(dplyr)
 library(lubridate)
+library(here)
 
-species_counts <- read_xlsx("../data/USFWS_Bat_Acoustic_Data/NightlyPassCounts.xlsx")
-sites <- read.csv("../data/Bat_Detector_Metadata/acoustic_sites.csv")
+species_counts <- read_xlsx(
+    here("data/USFWS_Bat_Acoustic_Data/NightlyPassCounts.xlsx")
+)
+sites <- read.csv(here("data/Bat_Detector_Metadata/acoustic_sites.csv"))
 ```
 
 ```{r}
