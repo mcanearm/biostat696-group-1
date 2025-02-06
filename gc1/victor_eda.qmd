@@ -1,0 +1,129 @@
+---
+title: "Victor EDA"
+format: pdf
+---
+
+```{r}
+#| label: "setup"
+#| message: FALSE
+
+here::i_am("gc1/victor_eda.qmd")
+
+library(conflicted)
+library(here)
+library(tidyverse)
+conflicts_prefer(dplyr::filter, dplyr::lag)
+
+load(here("data/processed/site_data_metadata.RData"))
+
+theme_set(theme_bw())
+```
+
+In `site_data`, there's one record for each pair of `AcousticSite` and
+`NightOf`.
+```{r}
+site_data %>%
+    count(AcousticSite, NightOf, name = "num_recs") %>%
+    filter(num_recs > 1)
+```
+
+The number of nights with data can vary a lot across sites.
+```{r}
+site_data %>%
+    group_by(AcousticSite) %>%
+    summarize(num_nights = length(NightOf)) %>%
+    ggplot(aes(num_nights)) +
+    geom_histogram(binwidth = 10, colour = "black", fill = "white") +
+    labs(x = "Number of Nights with Data", y = "Number of Sites")
+```
+
+```{r}
+site_counts_by_night <- site_data %>%
+    group_by(NightOf) %>%
+    summarize(num_sites = length(AcousticSite))
+```
+
+```{r}
+site_counts_by_night %>% pull(NightOf) %>% diff() %>% table()
+```
+
+
+```{r}
+site_counts_by_night <- complete(
+    site_counts_by_night,
+    NightOf = full_seq(NightOf, period = 86400),
+    fill = list(num_sites = 0)
+)
+```
+
+```{r}
+site_counts_by_night %>%
+    ggplot(aes(NightOf, num_sites)) +
+    geom_line() +
+    labs(x = "Night", y = "Number of Sites with Data")
+```
+
+
+There are no missing values in the count columns.
+```{r}
+site_data %>%
+    summarize(
+        across(
+            !c(AcousticSite, NightOf),
+            .fns = ~ sum(is.na(.x)),
+            .names = "{.col}_num_nas"
+        )
+    ) %>%
+    keep(~ .x > 0)
+```
+
+All values in the count columns are integers.
+```{r}
+site_data %>%
+    summarize(
+        across(
+            !c(AcousticSite, NightOf),
+            .fns = ~ sum(!near(.x, floor(.x))),
+            .names = "{.col}_num_non_integers"
+        )
+    ) %>%
+    keep(~ .x > 0)
+```
+
+All values in the count columns are nonnegative.
+```{r}
+site_data %>%
+    summarize(
+        across(
+            !c(AcousticSite, NightOf),
+            .fns = ~ sum(.x < 0),
+            .names = "{.col}_num_neg_vals"
+        )
+    ) %>%
+    keep(~ .x > 0)
+```
+
+This will come in handy later.
+```{r}
+non_ALL_cols <- setdiff(names(site_data), c("AcousticSite", "NightOf", "ALL"))
+```
+
+For many records, the `ALL` count doesn't equal the sum of the non-`ALL` counts.
+```{r}
+ALL_vals <- site_data$ALL
+non_ALL_sums <- site_data %>% select(all_of(non_ALL_cols)) %>% rowSums()
+table(near(ALL_vals, non_ALL_sums))
+```
+
+Based on the plot below, when the the `ALL` count doesn't equal the non-`ALL`
+sum, it's smaller; sometimes its substantially smaller.
+```{r}
+ggplot(
+    tibble(ALL_val = ALL_vals, non_ALL_sum = non_ALL_sums),
+    aes(ALL_val, non_ALL_sum)
+) +
+    geom_point(alpha = 0.3) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    labs(x = "ALL Value", y = "Non-ALL Sum") +
+    theme_bw()
+```
