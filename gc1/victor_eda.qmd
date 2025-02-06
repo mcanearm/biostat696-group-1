@@ -1,5 +1,5 @@
 ---
-title: "Victor EDA"
+title: "Victor's EDA"
 format: pdf
 ---
 
@@ -19,17 +19,17 @@ load(here("data/processed/data_metadata.RData"))
 theme_set(theme_bw())
 ```
 
-In `site_data`, there's one record for each pair of `AcousticSite` and
+In `data`, there's one record for each pair of `AcousticSite` and
 `NightOf`.
 ```{r}
-site_data %>%
+data %>%
     count(AcousticSite, NightOf, name = "num_recs") %>%
     filter(num_recs > 1)
 ```
 
 The number of nights with data can vary a lot across sites.
 ```{r}
-site_data %>%
+data %>%
     group_by(AcousticSite) %>%
     summarize(num_nights = length(NightOf)) %>%
     ggplot(aes(num_nights)) +
@@ -38,7 +38,7 @@ site_data %>%
 ```
 
 ```{r}
-site_counts_by_night <- site_data %>%
+site_counts_by_night <- data %>%
     group_by(NightOf) %>%
     summarize(num_sites = length(AcousticSite))
 ```
@@ -63,10 +63,9 @@ site_counts_by_night %>%
     labs(x = "Night", y = "Number of Sites with Data")
 ```
 
-
 There are no missing values in the count columns.
 ```{r}
-site_data %>%
+data %>%
     summarize(
         across(
             !c(AcousticSite, NightOf),
@@ -79,7 +78,7 @@ site_data %>%
 
 All values in the count columns are integers.
 ```{r}
-site_data %>%
+data %>%
     summarize(
         across(
             !c(AcousticSite, NightOf),
@@ -92,7 +91,7 @@ site_data %>%
 
 All values in the count columns are nonnegative.
 ```{r}
-site_data %>%
+data %>%
     summarize(
         across(
             !c(AcousticSite, NightOf),
@@ -105,13 +104,13 @@ site_data %>%
 
 This will come in handy later.
 ```{r}
-non_ALL_cols <- setdiff(names(site_data), c("AcousticSite", "NightOf", "ALL"))
+non_ALL_cols <- setdiff(names(data), c("AcousticSite", "NightOf", "ALL"))
 ```
 
 For many records, the `ALL` count doesn't equal the sum of the non-`ALL` counts.
 ```{r}
-ALL_vals <- site_data$ALL
-non_ALL_sums <- site_data %>% select(all_of(non_ALL_cols)) %>% rowSums()
+ALL_vals <- data$ALL
+non_ALL_sums <- data %>% select(all_of(non_ALL_cols)) %>% rowSums()
 table(near(ALL_vals, non_ALL_sums))
 ```
 
