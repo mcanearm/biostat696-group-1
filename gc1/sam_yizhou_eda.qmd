@@ -8,13 +8,25 @@ format: html
 #| message: FALSE
 
 here::i_am("gc1/sam_yizhou_eda.qmd")
-
 library(conflicted)
 library(here)
 library(tidyverse)
+library(geoR)
 conflicts_prefer(dplyr::filter, dplyr::lag)
 
-load(here("data/processeddata_metadata.RData"))
+load(here("data/processed/data_metadata.RData"))
 
 theme_set(theme_bw())
+```
+
+# Visualize the empirical semivariogram
+```{r}
+# Merge data and metadata using AcousticSite
+species <- setdiff(names(data), c("AcousticSite", "NightOf"))
+for(sp in species){
+    meta_data_sub <- meta_data |> filter(sp == "yes")
+    semivar_data <- inner_join(data, meta_data)
+}
+
+
 ```
