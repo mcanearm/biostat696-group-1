@@ -7,14 +7,14 @@ format: html
 #| label: "setup"
 #| message: FALSE
 
-here::i_am("gc1/victor_eda.qmd")
+here::i_am("gc1/sam_yizhou_eda.qmd")
 
 library(conflicted)
 library(here)
 library(tidyverse)
 conflicts_prefer(dplyr::filter, dplyr::lag)
 
-load(here("data/processed/site_data_metadata.RData"))
+load(here("data/processeddata_metadata.RData"))
 
 theme_set(theme_bw())
 ```
