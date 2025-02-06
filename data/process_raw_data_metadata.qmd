@@ -1,5 +1,5 @@
 ---
-title: "Process the Raw Data"
+title: "Process the Raw Data and Metadata"
 format: pdf
 ---
 
@@ -7,7 +7,7 @@ format: pdf
 #| label: "setup"
 #| message: FALSE
 
-here::i_am("data/process_raw_data.qmd")
+here::i_am("data/process_raw_data_metadata.qmd")
 
 library(conflicted)
 library(here)
@@ -18,12 +18,10 @@ library(sf)
 library(tidyverse)
 conflicts_prefer(dplyr::filter, dplyr::lag)
 
-site_data <- read_xlsx(
+data <- read_xlsx(
     here("data/raw/USFWS_Bat_Acoustic_Data/NightlyPassCounts.xlsx")
 )
-site_metadata <- read_csv(
-    here("data/raw/Bat_Detector_Metadata/acoustic_sites.csv")
-)
+metadata <- read_csv(here("data/raw/Bat_Detector_Metadata/acoustic_sites.csv"))
 
 theme_set(theme_bw())
 ```
@@ -52,7 +50,7 @@ ggplot() +
     geom_sf(data = usa, color = "black", fill = "white") +
     geom_sf(data = ontario, color = "black", fill = "white") +
     geom_sf(data = great_lakes, color = "lightblue", fill = "lightblue") +
-    geom_point(aes(Long, Lat), site_metadata, color = "red", shape = "bullet") +
+    geom_point(aes(Long, Lat), metadata, color = "red", shape = "bullet") +
     coord_sf(xlim = c(-123, -69), ylim = c(25, 50)) +
     labs(x = "Longitude", y = "Latitude", title = "Site Locations") +
     theme_minimal() +
@@ -60,22 +58,22 @@ ggplot() +
 ```
 We are going to identify the sites that are far away from the Great Lakes. It will help to have the state/province for each site; we find the sites' states and provinces below.
 ```{r}
-site_metadata_sf <- st_as_sf(
-    select(site_metadata, c(AcousticSite, Long, Lat)),
+metadata_sf <- st_as_sf(
+    select(metadata, c(AcousticSite, Long, Lat)),
     coords = c("Long", "Lat"),
     crs = 4326 # Need to use WGS84 CRS
 )
-site_states <- site_metadata_sf %>%
+site_states <- metadata_sf %>%
     st_join(rbind(usa, ontario)["name"]) %>%
     st_drop_geometry()
-site_metadata <- site_metadata %>%
+metadata <- metadata %>%
     inner_join(site_states, by = "AcousticSite") %>%
     relocate(state_province = name, .after = AcousticSite)
 ```
 
 For a small fraction of the sites, no state or province was found.
 ```{r}
-site_metadata %>%
+metadata %>%
     filter(is.na(state_province)) %>%
     select(AcousticSite:Lat) %>%
     print(n = Inf)
@@ -89,7 +87,7 @@ ggplot() +
     geom_sf(data = great_lakes, color = "lightblue", fill = "lightblue") +
     geom_point(
         aes(Long, Lat),
-        filter(site_metadata, is.na(state_province)),
+        filter(metadata, is.na(state_province)),
         color = "red", shape = "bullet"
     ) +
     coord_sf(xlim = c(-123, -69), ylim = c(25, 50)) +
@@ -103,8 +101,8 @@ ggplot() +
 
 We use Google Maps to identify the states and provinces for those sites. 
 ```{r}
-site_metadata <- mutate(
-    site_metadata,
+metadata <- mutate(
+    metadata,
     state_province = case_when(
         # https://www.google.com/maps/place/45°06'15.8%22N+87°03'10.1%22W
         AcousticSite == "BAILEY" ~ "Wisconsin",
@@ -157,7 +155,7 @@ site_metadata <- mutate(
 
 Below are the states with sites.
 ```{r}
-count(site_metadata, state_province, sort = TRUE, name = "num_sites")
+count(metadata, state_province, sort = TRUE, name = "num_sites")
 ```
 
 It looks like the sites far away from the Great Lakes are those that are either in Minnesota and below 46°N, or are in Iowa, or are below 41°N.
@@ -166,7 +164,7 @@ ggplot() +
     geom_sf(data = usa, color = "black", fill = "white") +
     geom_sf(data = ontario, color = "black", fill = "white") +
     geom_sf(data = great_lakes, color = "lightblue", fill = "lightblue") +
-    geom_point(aes(Long, Lat), site_metadata, color = "red", shape = "bullet") +
+    geom_point(aes(Long, Lat), metadata, color = "red", shape = "bullet") +
     geom_hline(yintercept = c(41, 46), linetype = "dashed") +
     scale_y_continuous(breaks = c(41, 46)) +
     coord_sf(xlim = c(-123, -69), ylim = c(25, 50)) +
@@ -177,8 +175,8 @@ ggplot() +
 
 We filter out the sites that are far away from the Great Lakes.
 ```{r}
-great_lakes_site_metadata <- filter(
-    site_metadata,
+great_lakes_metadata <- filter(
+    metadata,
     !(
         ((state_province == "Minnesota") & (Lat <= 46)) |
             (state_province == "Iowa") |
@@ -194,9 +192,7 @@ ggplot() +
     geom_sf(data = ontario, color = "black", fill = "white") +
     geom_sf(data = great_lakes, color = "lightblue", fill = "lightblue") +
     geom_point(
-        aes(Long, Lat),
-        great_lakes_site_metadata,
-        color = "red", shape = "bullet"
+        aes(Long, Lat), great_lakes_metadata, color = "red", shape = "bullet"
     ) +
     coord_sf(xlim = c(-123, -69), ylim = c(25, 50)) +
     labs(x = "Longitude", y = "Latitude", title = "Site Locations") +
@@ -206,34 +202,25 @@ ggplot() +
 
 We filter out the data for the sites that are far away from the Great Lakes.
 ```{r}
-great_lakes_site_data <- filter(
-    site_data, AcousticSite %in% great_lakes_site_metadata$AcousticSite
+great_lakes_data <- filter(
+    data, AcousticSite %in% great_lakes_metadata$AcousticSite
 )
 ```
 
 The percentage reductions in the number of sites and the number of data records are below.
 ```{r}
 c(
-    num_sites_reduc = 100 * (
-        nrow(great_lakes_site_metadata) / nrow(site_metadata) - 1
-    ),
-    num_data_recs_reduc = 100 * (
-        nrow(great_lakes_site_data) / nrow(site_data) - 1
-    )
+    num_sites_reduc = 100 * (nrow(great_lakes_metadata) / nrow(metadata) - 1),
+    num_data_recs_reduc = 100 * (nrow(great_lakes_data) / nrow(data) - 1)
 )
 ```
 
 We save the data and metadata for the Great Lakes sites under shorter names.
 ```{r}
-env <- list2env(
-    list(
-        site_metadata = great_lakes_site_metadata,
-        site_data = great_lakes_site_data
-    )    
-)
+env <- list2env(list(metadata = great_lakes_metadata, data = great_lakes_data))
 save(
     list = ls(env),
-    file = here("data/processed/site_data_metadata.RData"),
+    file = here("data/processed/data_metadata.RData"),
     envir = env
 )
 ```
