@@ -15,6 +15,9 @@ here::i_am("gc1/victor_eda.qmd")
 
 library(conflicted)
 library(here)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(sf)
 library(tidyverse)
 conflicts_prefer(dplyr::filter, dplyr::lag)
 
@@ -113,25 +116,33 @@ data %>%
 
 For some species, there are no nonzero counts.
 ```{r}
- data %>%
+zero_count_cols <- data %>%
     summarize(across(all_of(count_cols), ~ any(.x > 0))) %>%
-    discard(isTRUE)
+    discard(isTRUE) %>%
+    names()
+zero_count_cols
 ```
 
-This will come in handy later.
+We exclude the species with no nonzero counts.
 ```{r}
-non_ALL_cols <- setdiff(names(data), c("AcousticSite", "NightOf", "ALL"))
+count_cols <- setdiff(count_cols, zero_count_cols)
+```
+
+
+This will come in handy in a few places.
+```{r}
+non_ALL_count_cols <- setdiff(count_cols, "ALL")
 ```
 
 For many records, the `ALL` count doesn't equal the sum of the non-`ALL` counts.
 ```{r}
 ALL_vals <- data$ALL
-non_ALL_sums <- data %>% select(all_of(non_ALL_cols)) %>% rowSums()
+non_ALL_sums <- data %>% select(all_of(non_ALL_count_cols)) %>% rowSums()
 table(near(ALL_vals, non_ALL_sums))
 ```
 
 Based on the plot below, when the the `ALL` count doesn't equal the non-`ALL`
-sum, it's smaller; sometimes it's substantially smaller.
+sum, it's larger; sometimes it's substantially larger.
 ```{r}
 ggplot(
     tibble(ALL_val = ALL_vals, non_ALL_sum = non_ALL_sums),
@@ -142,3 +153,94 @@ ggplot(
     labs(x = "ALL Value", y = "Non-ALL Sum") +
     theme_bw()
 ```
+
+# Normalized Count Maps
+
+The following objects contain information on state, province, and lake boundaries and will be used when making maps.
+```{r}
+#| output: FALSE
+
+great_lakes_states <- ne_states(
+    country = "United States of America", returnclass = "sf"
+) %>%
+    filter(
+        name %in% c(
+            "Minnesota", "Wisconsin", "Illinois", "Indiana", "Michigan", "Ohio",
+            "Pennsylvania", "New York"
+        )
+    )
+ontario <- ne_states(country = "Canada", returnclass = "sf") %>%
+    filter(name == "Ontario")
+great_lakes <- ne_download(
+    scale = 50, type = "lakes", category = "physical", returnclass = "sf"
+) %>%
+    filter(
+        name %in% c(
+            "Lake Superior", "Lake Michigan", "Lake Huron", "Lake Erie",
+            "Lake Ontario"
+        )
+    )
+```
+
+For each site, we compute the number of nights with data, and for each species, we compute the number of detections per night.
+```{r}
+#| message: FALSE
+
+data_rollup <- data %>%
+    group_by(AcousticSite) %>%
+    summarize(
+        num_nights = length(NightOf), across(all_of(count_cols) & !ALL, sum)
+    ) %>%
+    rowwise(AcousticSite, num_nights) %>%
+    summarize(across(all_of(non_ALL_count_cols), ~ .x / num_nights)) %>%
+    ungroup() %>%
+    inner_join(
+        select(metadata, AcousticSite, Long, Lat), by = "AcousticSite"
+    ) %>%
+    relocate(Long, Lat, .after = AcousticSite)
+```
+
+The sites with the largest number of nights with data are largely along Minnesota's border with Lake Michigan.
+```{r}
+ggplot() +
+    geom_sf(data = great_lakes_states, color = "black", fill = "white") +
+    geom_sf(data = ontario, color = "black", fill = "white") +
+    geom_sf(data = great_lakes, color = "lightblue", fill = "lightblue") +
+    geom_point(aes(Long, Lat, color = num_nights), data_rollup) +
+    scale_color_gradient(low = "blue", high = "red") +
+    coord_sf(xlim = c(-92, -76), ylim = c(41, 49)) +
+    labs(
+        x = "Longitude", y = "Latitude", color = "Number of Nights",
+        title = "Site Locations"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "top", plot.title = element_text(hjust = 0.5))
+```
+
+For each species, we will use the function below to make a map showing how the number of detections per night varies across sites.
+```{r}
+make_map <- function(count_col) {
+    ggplot() +
+        geom_sf(data = great_lakes_states, color = "black", fill = "white") +
+        geom_sf(data = ontario, color = "black", fill = "white") +
+        geom_sf(data = great_lakes, color = "lightblue", fill = "lightblue") +
+        geom_point(aes(Long, Lat, color = !!as.name(count_col)), data_rollup) +
+        scale_color_gradient(low = "blue", high = "red") +
+        coord_sf(xlim = c(-92, -76), ylim = c(41, 49)) +
+        labs(
+            x = "Longitude", y = "Latitude",
+            color = str_glue("{count_col} Detections/Night"),
+            title = "Site Locations"
+        ) +
+        theme_minimal() +
+        theme(legend.position = "top", plot.title = element_text(hjust = 0.5))    
+}
+```
+
+Some species are more dispersed geographically than others. Also, some species are more abundant than others.
+```{r}
+for (count_col in non_ALL_count_cols) {
+    print(make_map(count_col))
+}
+```
+
