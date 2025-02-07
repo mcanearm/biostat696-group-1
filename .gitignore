@@ -49,3 +49,6 @@ po/*~
 rsconnect/
 
 ./data/*
+/gc1/sam_yizhou_eda_files
+/data/raw/USFWS_Bat_Acoustic_Data
+/gc1/gc1_files
