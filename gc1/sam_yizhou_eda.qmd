@@ -58,7 +58,7 @@ sightings_df <- vis_data |>
     mutate(SightingsPerNight = TotalSightings / detectorNights)
 ```
 
-It is difficult to discern any patterns in the spatial variation of the total number of sightings by species.
+It is difficult to discern any patterns in the spatial variation of the mean number of sightings per night by species.
 ```{r}
 mainmap <- ne_states(country = c("united states of america", "canada"), returnclass = "sf")
 michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia"))
@@ -79,7 +79,7 @@ A histogram of total sightings by station suggests outliers for >= 100 sightings
 hist(sightings_df$SightingsPerNight)
 ```
 
-The lack of a clear spatial pattern continues even when we filter out seeming outliers in the number of total sightings.
+The lack of a clear spatial pattern continues even when we filter out seeming outliers in the number of mean sightings per night.
 ```{r}
 sightings_df |>
     filter(SightingsPerNight <= 100) |>

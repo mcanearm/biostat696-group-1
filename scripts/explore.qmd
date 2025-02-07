@@ -10,15 +10,23 @@ bibliography: references.bib
 here::i_am("scripts/explore.qmd")
 
 library(readxl)
-library(ggplot2)
-library(dplyr)
+library(tidyverse)
 library(lubridate)
 library(here)
+library(conflicted)
+library(scico)
+library(sf)
+library(rnaturalearth)
+library(geoR)
 
 species_counts <- read_xlsx(
-    here("data/USFWS_Bat_Acoustic_Data/NightlyPassCounts.xlsx")
+    here("data/raw/USFWS_Bat_Acoustic_Data/NightlyPassCounts.xlsx")
 )
-sites <- read.csv(here("data/Bat_Detector_Metadata/acoustic_sites.csv"))
+sites <- read.csv(here("data/raw/Bat_Detector_Metadata/acoustic_sites.csv"))
+
+conflicts_prefer(dplyr::filter, dplyr::lag)
+
+load(here("data/processed/data_metadata.RData"))
 ```
 
 ```{r}
@@ -117,9 +125,92 @@ write.csv(
   * Dimensions are $\mathcal{D}^2$, and observations are indexed by latitude and longitude.
 
 * **Visualize the empirical covariogram for the variable of interest. Does the variogram suggest spatial dependence in the data?**
+```{r}
+#| message: FALSE
+miss_spec <- c("ANTPAL", "CORRAF", "LASINT", "TADBRA")
+
+vis_data <- data |> 
+    select(-one_of(miss_spec)) 
+species <- setdiff(names(vis_data), c("AcousticSite", "NightOf", "ALL", miss_spec))
+
+vis_metadata <- metadata |> 
+    select(-one_of(miss_spec)) |>
+    group_by(AcousticSite, Lat, Long, across(all_of(species))) |>
+    summarise(detectorNights = sum(across(all_of(as.character(2010:2018))))) |>
+    ungroup()
+
+sv_data <- data.frame(
+    species = character(), dists = numeric(), variogram = numeric(), npairs = numeric(), sd = numeric()
+)
+for(sp in species){
+    # Metadata for the stations relevant to the species of interest
+    vis_metadata_sub <- vis_metadata |> 
+        filter(.data[[sp]] == "yes") |>
+        select(AcousticSite, Long, Lat, detectorNights) 
+    # Get total sightings across years for each station
+    sp_data <- inner_join(vis_data, vis_metadata_sub, "AcousticSite") |>
+        group_by(AcousticSite, Long, Lat, detectorNights) |>
+        summarise(TotalSightings = sum(.data[[sp]])) |>
+        mutate(SightingsPerNight = TotalSightings / detectorNights)
+    # Plot the semivariogram for each species
+    sv <- sp_data %>% with(geoR::variog(data = SightingsPerNight, coords = cbind(Long, Lat), messages=FALSE))
+    sv_df <- data.frame(species = sp, dists = sv$u, variogram = sv$v, npairs = sv$n, sd = sv$sd)
+    sv_data <- rbind(sv_data, sv_df)
+}
+ggplot(sv_data, aes(x=dists, y=variogram)) + 
+    geom_point(size=2, shape=8) +
+    facet_wrap(~ species, nrow = 2, scales = "free") +
+    theme_minimal() + 
+    xlab("Distances") +
+    ylab("Variogram")
+```
+
+  * The covariograms suggest wildly differing spatial dependences across bat species when ignoring temporal variation, including both positive and negative spatial dependence.
+
 * **Map the data. Map the spatial variables, and write short but meaningful captions for your figures.**
+  * It is difficult to discern any patterns in the spatial variation of the mean number of sightings per night by species. The lack of a clear spatial pattern continues even when we filter out seeming outliers in the number of mean number of mean sightings per night.
+
+```{r}
+vis_metadata2 <- vis_metadata |> 
+    select(AcousticSite, Lat, Long, detectorNights)
+
+sightings_df <- vis_data |>
+    select(-NightOf) |>
+    group_by(AcousticSite) |>
+    summarise(across(everything(), sum)) |>
+    inner_join(vis_metadata2, "AcousticSite") |>
+    pivot_longer(
+        cols = all_of(species), names_to = "Species", values_to = "TotalSightings"
+    ) |>
+    mutate(SightingsPerNight = TotalSightings / detectorNights)
+
+mainmap <- ne_states(country = c("united states of america", "canada"), returnclass = "sf")
+michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia"))
+
+sightings_df |>
+    ggplot() +
+    geom_point(size = .8, aes(x = Long, y = Lat, fill = SightingsPerNight)) +
+    geom_sf(data = michiganplus, fill = "white", color = "black") +
+    coord_sf(ylim = c(41, 49), xlim = c(-77, -91)) +
+    facet_wrap(~ Species, nrow = 2) +
+    theme_minimal() +
+    scale_fill_scico(palette="batlowK") +
+    ggtitle("Mean Sightings Per Night at Each Station by Species")
+
+sightings_df |>
+    filter(SightingsPerNight <= 100) |>
+    ggplot() +
+    geom_point(size = .8, aes(x = Long, y = Lat, fill = SightingsPerNight)) +
+    geom_sf(data = michiganplus, fill = "white", color = "black") +
+    coord_sf(ylim = c(41, 49), xlim = c(-77, -91)) +
+    facet_wrap(~ Species, nrow = 2) +
+    theme_minimal() +
+    scale_fill_scico(palette="batlowK") +
+    ggtitle("Mean Sightings Per Night at Each Station by Species", subtitle = "(Sightings/night >100 removed)")
+```
+
 * **How do you imagine spatial dependence may play a role between the variables in the dataset?**
-  * There will be a large spatial dependendence in the count of bats for nearby detectors. I expect that because certain species each have limited ranges that are spatially determined by habitat factors, then the individual sensors are likely to pick up only certain bats, and therefore nearby sensors should see similar counts of bats.
+  * There will be a large spatial dependence in the count of bats for nearby detectors. We expect that because certain species each have limited ranges that are spatially determined by habitat factors, then the individual sensors are likely to pick up only certain bats, and therefore nearby sensors should see similar counts of bats.
 
 * **What are some research questions that these data could help answer (at least one for each dataset)?**
     * Which bat species have the largest or most stable ranges in the Great Lakes?
