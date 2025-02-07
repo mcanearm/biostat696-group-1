@@ -1,8 +1,10 @@
 ---
 title: "Victor's EDA"
-format: html
-toc: true
-number-sections: true
+format:
+    html:
+        embed-resources: true
+        toc: true
+        number-sections: true
 ---
 
 ```{r}
