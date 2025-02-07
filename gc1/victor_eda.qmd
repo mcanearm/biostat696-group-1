@@ -1,6 +1,8 @@
 ---
 title: "Victor's EDA"
-format: pdf
+format: html
+toc: true
+number-sections: true
 ---
 
 ```{r}
@@ -18,6 +20,8 @@ load(here("data/processed/data_metadata.RData"))
 
 theme_set(theme_bw())
 ```
+
+# The Relationship between `AcousticSite` and `NightOf`
 
 In `data`, there's one record for each pair of `AcousticSite` and
 `NightOf`.
@@ -37,17 +41,19 @@ data %>%
     labs(x = "Number of Nights with Data", y = "Number of Sites")
 ```
 
+We next count sites by night.
 ```{r}
 site_counts_by_night <- data %>%
     group_by(NightOf) %>%
     summarize(num_sites = length(AcousticSite))
 ```
 
+We compute the difference in days between nights that are listed consecutively; the table below shows that the difference is one day for most, but not all, pairs of consecutive nights. In other words, there are gaps in the sequence of nights.
 ```{r}
 site_counts_by_night %>% pull(NightOf) %>% diff() %>% table()
 ```
 
-
+To fill in the gaps, we insert records whose site counts are zero.
 ```{r}
 site_counts_by_night <- complete(
     site_counts_by_night,
@@ -56,12 +62,15 @@ site_counts_by_night <- complete(
 )
 ```
 
+The line plot below shows that the gaps largely start at the end of one year and stretch into the beginning of the next year. However, there are dips in the site count in the middle of each year, and some of these dips reach zero. Another finding from this plot is that many more sites produced data in the early 2010s than later in the decade.
 ```{r}
 site_counts_by_night %>%
     ggplot(aes(NightOf, num_sites)) +
     geom_line() +
     labs(x = "Night", y = "Number of Sites with Data")
 ```
+
+# The Count Columns
 
 There are no missing values in the count columns.
 ```{r}
@@ -115,7 +124,7 @@ table(near(ALL_vals, non_ALL_sums))
 ```
 
 Based on the plot below, when the the `ALL` count doesn't equal the non-`ALL`
-sum, it's smaller; sometimes its substantially smaller.
+sum, it's smaller; sometimes it's substantially smaller.
 ```{r}
 ggplot(
     tibble(ALL_val = ALL_vals, non_ALL_sum = non_ALL_sums),
