@@ -74,15 +74,15 @@ site_counts_by_night %>%
 
 # The Count Columns
 
+```{r}
+count_cols <- setdiff(names(data), c("AcousticSite", "NightOf"))
+```
+
 There are no missing values in the count columns.
 ```{r}
 data %>%
     summarize(
-        across(
-            !c(AcousticSite, NightOf),
-            .fns = ~ sum(is.na(.x)),
-            .names = "{.col}_num_nas"
-        )
+        across(all_of(count_cols), ~ sum(is.na(.x)), .names = "{.col}_num_nas")
     ) %>%
     keep(~ .x > 0)
 ```
@@ -92,8 +92,8 @@ All values in the count columns are integers.
 data %>%
     summarize(
         across(
-            !c(AcousticSite, NightOf),
-            .fns = ~ sum(!near(.x, floor(.x))),
+            all_of(count_cols),
+            ~ sum(!near(.x, floor(.x))),
             .names = "{.col}_num_non_integers"
         )
     ) %>%
@@ -105,12 +105,17 @@ All values in the count columns are nonnegative.
 data %>%
     summarize(
         across(
-            !c(AcousticSite, NightOf),
-            .fns = ~ sum(.x < 0),
-            .names = "{.col}_num_neg_vals"
+            all_of(count_cols), ~ sum(.x < 0), .names = "{.col}_num_neg_vals"
         )
     ) %>%
     keep(~ .x > 0)
+```
+
+For some species, there are no nonzero counts.
+```{r}
+ data %>%
+    summarize(across(all_of(count_cols), ~ any(.x > 0))) %>%
+    discard(isTRUE)
 ```
 
 This will come in handy later.
