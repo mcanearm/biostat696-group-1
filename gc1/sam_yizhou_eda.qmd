@@ -11,6 +11,9 @@ here::i_am("gc1/sam_yizhou_eda.qmd")
 library(conflicted)
 library(here)
 library(tidyverse)
+library(scico)
+library(sf)
+library(rnaturalearth)
 library(geoR)
 conflicts_prefer(dplyr::filter, dplyr::lag)
 
@@ -19,14 +22,99 @@ load(here("data/processed/data_metadata.RData"))
 theme_set(theme_bw())
 ```
 
-# Visualize the empirical semivariogram
+Note that the ANTPAL, CORRAF, LASINT, TADBRA species are not tracked in any stations, so we will drop them for our subsequent analysis.
+
 ```{r}
-# Merge data and metadata using AcousticSite
-species <- setdiff(names(data), c("AcousticSite", "NightOf"))
+metadata$ANTPAL |> table()
+metadata$CORRAF |> table()
+metadata$LASINT |> table()
+metadata$TADBRA |> table()
+
+miss_spec <- c("ANTPAL", "CORRAF", "LASINT", "TADBRA")
+
+vis_data <- data |> 
+    select(-one_of(miss_spec)) 
+vis_metadata <- metadata |> 
+    select(-one_of(miss_spec)) |>
+    select(AcousticSite, Lat, Long)
+
+species <- setdiff(names(vis_data), c("AcousticSite", "NightOf", "ALL", miss_spec))
+```
+
+# Visualize the spatial distribution of total sightings by species
+```{r}
+total_sightings <- vis_data |>
+    select(-NightOf) |>
+    group_by(AcousticSite) |>
+    summarise(across(everything(), sum)) |>
+    inner_join(vis_metadata, "AcousticSite") |>
+    pivot_longer(
+        cols = all_of(species), names_to = "Species", values_to = "TotalSightings"
+    )
+```
+
+It is difficult to discern any patterns in the spatial variation of the total number of sightings by species.
+```{r}
+mainmap <- ne_states(country = c("united states of america", "canada"), returnclass = "sf")
+michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia"))
+
+total_sightings |>
+    ggplot() +
+    geom_point(size = .8, aes(x = Long, y = Lat, fill=TotalSightings)) +
+    geom_sf(data = michiganplus, fill = "white", color = "black") +
+    coord_sf(ylim = c(41, 49), xlim = c(-77, -91)) +
+    facet_wrap(~ Species, nrow = 2) +
+    theme_minimal() +
+    scale_fill_scico(palette="batlowK") +
+    ggtitle("Total Sightings at Each Station by Species")
+```
+
+A histogram of total sightings by station suggests outliers for >= 20,000 sightings.
+```{r}
+hist(total_sightings$TotalSightings)
+```
+
+The lack of a clear spatial pattern continues even when we filter out seeming outliers in the number of total sightings.
+```{r}
+total_sightings |>
+    filter(TotalSightings <= 20000) |>
+    ggplot() +
+    geom_point(size = .8, aes(x = Long, y = Lat, fill=TotalSightings)) +
+    geom_sf(data = michiganplus, fill = "white", color = "black") +
+    coord_sf(ylim = c(41, 49), xlim = c(-77, -91)) +
+    facet_wrap(~ Species, nrow = 2) +
+    theme_minimal() +
+    scale_fill_scico(palette="batlowK") +
+    ggtitle("Total Sightings at Each Station by Species", subtitle = "(Sightings >20,000 removed)")
+```
+
+# Visualize the empirical semivariogram of total sightings by species
+
+To create our semivariogram for each species, we have to merge the data and metadata to get the Latitude and Longitude information for the stations that track the species of interest.
+```{r}
+#| message: FALSE
+#| 
+sv_data <- data.frame(
+    species = character(), dists = numeric(), variogram = numeric(), npairs = numeric(), sd = numeric()
+)
 for(sp in species){
-    meta_data_sub <- meta_data |> filter(sp == "yes")
-    semivar_data <- inner_join(data, meta_data)
+    # Metadata for the stations relevant to the species of interest
+    metadata_sub <- metadata |> 
+        filter(.data[[sp]] == "yes") |>
+        select(AcousticSite, Long, Lat)
+    # Get total sightings across years for each station
+    sp_data <- inner_join(vis_data, metadata_sub, "AcousticSite") |>
+        group_by(AcousticSite, Long, Lat) |>
+        summarise(TotalSightings = sum(.data[[sp]]))
+    # Plot the semivariogram for each species
+    sv <- sp_data %>% with(geoR::variog(data = TotalSightings, coords = cbind(Long, Lat), messages=FALSE))
+    sv_df <- data.frame(species = sp, dists = sv$u, variogram = sv$v, npairs = sv$n, sd = sv$sd)
+    sv_data <- rbind(sv_data, sv_df)
 }
-
-
+ggplot(sv_data, aes(x=dists, y=variogram)) + 
+    geom_point(size=2, shape=8) +
+    facet_wrap(~ species, nrow = 2, scales = "free") +
+    theme_minimal() + 
+    xlab("Distances") +
+    ylab("Variogram")
 ```
