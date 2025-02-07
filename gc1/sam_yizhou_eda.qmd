@@ -34,23 +34,28 @@ miss_spec <- c("ANTPAL", "CORRAF", "LASINT", "TADBRA")
 
 vis_data <- data |> 
     select(-one_of(miss_spec)) 
+species <- setdiff(names(vis_data), c("AcousticSite", "NightOf", "ALL", miss_spec))
+
 vis_metadata <- metadata |> 
     select(-one_of(miss_spec)) |>
-    select(AcousticSite, Lat, Long)
-
-species <- setdiff(names(vis_data), c("AcousticSite", "NightOf", "ALL", miss_spec))
+    group_by(AcousticSite, Lat, Long, across(all_of(species))) |>
+    summarise(detectorNights = sum(across(all_of(as.character(2010:2018))))) |>
+    ungroup()
+vis_metadata2 <- vis_metadata |> 
+    select(AcousticSite, Lat, Long, detectorNights)
 ```
 
-# Visualize the spatial distribution of total sightings by species
+# Visualize the spatial distribution of mean sightings per night by species
 ```{r}
-total_sightings <- vis_data |>
+sightings_df <- vis_data |>
     select(-NightOf) |>
     group_by(AcousticSite) |>
     summarise(across(everything(), sum)) |>
-    inner_join(vis_metadata, "AcousticSite") |>
+    inner_join(vis_metadata2, "AcousticSite") |>
     pivot_longer(
         cols = all_of(species), names_to = "Species", values_to = "TotalSightings"
-    )
+    ) |>
+    mutate(SightingsPerNight = TotalSightings / detectorNights)
 ```
 
 It is difficult to discern any patterns in the spatial variation of the total number of sightings by species.
@@ -58,34 +63,34 @@ It is difficult to discern any patterns in the spatial variation of the total nu
 mainmap <- ne_states(country = c("united states of america", "canada"), returnclass = "sf")
 michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia"))
 
-total_sightings |>
+sightings_df |>
     ggplot() +
-    geom_point(size = .8, aes(x = Long, y = Lat, fill=TotalSightings)) +
+    geom_point(size = .8, aes(x = Long, y = Lat, fill = SightingsPerNight)) +
     geom_sf(data = michiganplus, fill = "white", color = "black") +
     coord_sf(ylim = c(41, 49), xlim = c(-77, -91)) +
     facet_wrap(~ Species, nrow = 2) +
     theme_minimal() +
     scale_fill_scico(palette="batlowK") +
-    ggtitle("Total Sightings at Each Station by Species")
+    ggtitle("Mean Sightings Per Night at Each Station by Species")
 ```
 
-A histogram of total sightings by station suggests outliers for >= 20,000 sightings.
+A histogram of total sightings by station suggests outliers for >= 100 sightings per night.
 ```{r}
-hist(total_sightings$TotalSightings)
+hist(sightings_df$SightingsPerNight)
 ```
 
 The lack of a clear spatial pattern continues even when we filter out seeming outliers in the number of total sightings.
 ```{r}
-total_sightings |>
-    filter(TotalSightings <= 20000) |>
+sightings_df |>
+    filter(SightingsPerNight <= 100) |>
     ggplot() +
-    geom_point(size = .8, aes(x = Long, y = Lat, fill=TotalSightings)) +
+    geom_point(size = .8, aes(x = Long, y = Lat, fill = SightingsPerNight)) +
     geom_sf(data = michiganplus, fill = "white", color = "black") +
     coord_sf(ylim = c(41, 49), xlim = c(-77, -91)) +
     facet_wrap(~ Species, nrow = 2) +
     theme_minimal() +
     scale_fill_scico(palette="batlowK") +
-    ggtitle("Total Sightings at Each Station by Species", subtitle = "(Sightings >20,000 removed)")
+    ggtitle("Mean Sightings Per Night at Each Station by Species", subtitle = "(Sightings/night >100 removed)")
 ```
 
 # Visualize the empirical semivariogram of total sightings by species
@@ -99,15 +104,16 @@ sv_data <- data.frame(
 )
 for(sp in species){
     # Metadata for the stations relevant to the species of interest
-    metadata_sub <- metadata |> 
+    vis_metadata_sub <- vis_metadata |> 
         filter(.data[[sp]] == "yes") |>
-        select(AcousticSite, Long, Lat)
+        select(AcousticSite, Long, Lat, detectorNights) 
     # Get total sightings across years for each station
-    sp_data <- inner_join(vis_data, metadata_sub, "AcousticSite") |>
-        group_by(AcousticSite, Long, Lat) |>
-        summarise(TotalSightings = sum(.data[[sp]]))
+    sp_data <- inner_join(vis_data, vis_metadata_sub, "AcousticSite") |>
+        group_by(AcousticSite, Long, Lat, detectorNights) |>
+        summarise(TotalSightings = sum(.data[[sp]])) |>
+        mutate(SightingsPerNight = TotalSightings / detectorNights)
     # Plot the semivariogram for each species
-    sv <- sp_data %>% with(geoR::variog(data = TotalSightings, coords = cbind(Long, Lat), messages=FALSE))
+    sv <- sp_data %>% with(geoR::variog(data = SightingsPerNight, coords = cbind(Long, Lat), messages=FALSE))
     sv_df <- data.frame(species = sp, dists = sv$u, variogram = sv$v, npairs = sv$n, sd = sv$sd)
     sv_data <- rbind(sv_data, sv_df)
 }
