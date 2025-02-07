@@ -1,6 +1,6 @@
 ---
 title: "explore"
-format: pdf
+format: beamer
 bibliography: references.bib
 ---
 
