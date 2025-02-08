@@ -1,6 +1,8 @@
 ---
 title: "Process the Raw Data and Metadata"
-format: pdf
+format:
+    html:
+        embed-resources: true
 ---
 
 ```{r}
