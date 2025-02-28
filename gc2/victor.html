@@ -3498,22 +3498,15 @@ Number of Fisher Scoring iterations: 6</code></pre>
 <span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">as.geodata</span>() <span class="sc">%&gt;%</span></span>
 <span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">jitterDupCoords</span>(<span class="at">max =</span> <span class="fl">1e-4</span>) <span class="sc">%&gt;%</span></span>
 <span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">variog</span>(<span class="at">uvec =</span> <span class="dv">100</span>, <span class="at">messages =</span> <span class="cn">FALSE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code>as.geodata: 93 replicated data locations found. 
- Consider using jitterDupCoords() for jittering replicated locations. 
-WARNING: there are data at coincident or very closed locations, some of the geoR&#39;s functions may not work.
- Use function dup.coords() to locate duplicated coordinates.
- Consider using jitterDupCoords() for jittering replicated locations </code></pre>
-</div>
 </div>
 <p>The empirical semivariogram suggests spatial dependence only over small distances. We can try fitting a Poisson regression model with spatial random effects.</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb24"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>mod1_variogram <span class="sc">%&gt;%</span></span>
-<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">plot</span>(</span>
-<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>        <span class="at">type =</span> <span class="st">&quot;o&quot;</span>,</span>
-<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>        <span class="at">main =</span> <span class="st">&quot;Empirical Semivariogram of Residuals&quot;</span>,</span>
-<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>        <span class="at">xlab =</span> <span class="st">&quot;Distance&quot;</span>, <span class="at">ylab =</span> <span class="st">&quot;Semivariance&quot;</span></span>
-<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>    )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb23"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>mod1_variogram <span class="sc">%&gt;%</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">plot</span>(</span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>        <span class="at">type =</span> <span class="st">&quot;o&quot;</span>,</span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>        <span class="at">main =</span> <span class="st">&quot;Empirical Semivariogram of Residuals&quot;</span>,</span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>        <span class="at">xlab =</span> <span class="st">&quot;Distance&quot;</span>, <span class="at">ylab =</span> <span class="st">&quot;Semivariance&quot;</span></span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>    )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div>
 <figure class="figure">
@@ -3527,18 +3520,18 @@ WARNING: there are data at coincident or very closed locations, some of the geoR
 <h2 data-number="2.2" class="anchored" data-anchor-id="a-quasi-poisson-regression-model"><span class="header-section-number">2.2</span> A Quasi-Poisson Regression Model</h2>
 <p>We next try a Quasi-Poisson regression model, i.e., one for which the dispersion parameter is estimated instead of being fixed at one.</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb25"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>mod2 <span class="ot">&lt;-</span> <span class="fu">glm</span>(</span>
-<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>    ALL <span class="sc">~</span> dist_to_water <span class="sc">+</span> num_nights <span class="sc">+</span> num_detectable_species,</span>
-<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a>    quasipoisson,</span>
-<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>    data_for_mods</span>
-<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a>mod2_fitted_vals_resids <span class="ot">&lt;-</span> <span class="fu">tibble</span>(</span>
-<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">fitted_val =</span> <span class="fu">fitted</span>(mod2), <span class="at">resid =</span> <span class="fu">resid</span>(mod2)</span>
-<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb24"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>mod2 <span class="ot">&lt;-</span> <span class="fu">glm</span>(</span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>    ALL <span class="sc">~</span> dist_to_water <span class="sc">+</span> num_nights <span class="sc">+</span> num_detectable_species,</span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>    quasipoisson,</span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>    data_for_mods</span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>mod2_fitted_vals_resids <span class="ot">&lt;-</span> <span class="fu">tibble</span>(</span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">fitted_val =</span> <span class="fu">fitted</span>(mod2), <span class="at">resid =</span> <span class="fu">resid</span>(mod2)</span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>Below is a summary of the fitted model. Note that the estimated dispersion parameter is large, so the fitted model is similar to the first fitted model.</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb26"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(mod2)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb25"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(mod2)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>
 Call:
@@ -3565,12 +3558,12 @@ Number of Fisher Scoring iterations: 6</code></pre>
 </div>
 <p>Since the dispersion parameter estimate is large, the scatterplot of the absolute residual versus the square root of the fitted value looks almost exactly like the first scatterplot.</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb28"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>mod2_fitted_vals_resids <span class="sc">%&gt;%</span></span>
-<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="fu">sqrt</span>(fitted_val), <span class="fu">abs</span>(resid))) <span class="sc">+</span></span>
-<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_point</span>(<span class="at">alpha =</span> <span class="fl">0.3</span>) <span class="sc">+</span></span>
-<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_abline</span>(<span class="at">linetype =</span> <span class="st">&quot;dashed&quot;</span>, <span class="at">slope =</span> <span class="dv">1</span>, <span class="at">intercept =</span> <span class="dv">0</span>) <span class="sc">+</span></span>
-<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">x =</span> <span class="fu">expression</span>(<span class="fu">sqrt</span>(<span class="st">&quot;Fitted Value&quot;</span>)), <span class="at">y =</span> <span class="st">&quot;Absolute Residual&quot;</span>) <span class="sc">+</span></span>
-<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme_bw</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb27"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>mod2_fitted_vals_resids <span class="sc">%&gt;%</span></span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="fu">sqrt</span>(fitted_val), <span class="fu">abs</span>(resid))) <span class="sc">+</span></span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_point</span>(<span class="at">alpha =</span> <span class="fl">0.3</span>) <span class="sc">+</span></span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_abline</span>(<span class="at">linetype =</span> <span class="st">&quot;dashed&quot;</span>, <span class="at">slope =</span> <span class="dv">1</span>, <span class="at">intercept =</span> <span class="dv">0</span>) <span class="sc">+</span></span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">labs</span>(<span class="at">x =</span> <span class="fu">expression</span>(<span class="fu">sqrt</span>(<span class="st">&quot;Fitted Value&quot;</span>)), <span class="at">y =</span> <span class="st">&quot;Absolute Residual&quot;</span>) <span class="sc">+</span></span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme_bw</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div>
 <figure class="figure">
@@ -3581,7 +3574,7 @@ Number of Fisher Scoring iterations: 6</code></pre>
 </div>
 <p>The Pearson dispersion statistic didn’t change.</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb29"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="fu">calc_pearson_disperse_stat</span>(mod2)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb28"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="fu">calc_pearson_disperse_stat</span>(mod2)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>[1] 3.198157</code></pre>
 </div>
@@ -3593,39 +3586,46 @@ Number of Fisher Scoring iterations: 6</code></pre>
 <p>Since the empirical semivariogram of the residuals for the Poisson regression model suggests spatial dependence over small distances, we next fit a Poisson regression model with spatial random effects.</p>
 <p>To avoid numerical issues, we jitter the coordinates of the sites.</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb31"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>jittered_data_for_mods <span class="ot">&lt;-</span> <span class="fu">mutate</span>(</span>
-<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>    data_for_mods,</span>
-<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">Lat =</span> <span class="fu">jitter</span>(Lat, <span class="at">factor =</span> <span class="fl">1e-4</span>), <span class="at">Long =</span> <span class="fu">jitter</span>(Long, <span class="at">factor =</span> <span class="fl">1e-4</span>)</span>
-<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb30"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>jittered_data_for_mods <span class="ot">&lt;-</span> <span class="fu">mutate</span>(</span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>    data_for_mods,</span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">Lat =</span> <span class="fu">jitter</span>(Lat, <span class="at">factor =</span> <span class="fl">1e-4</span>), <span class="at">Long =</span> <span class="fu">jitter</span>(Long, <span class="at">factor =</span> <span class="fl">1e-4</span>)</span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<p>We fit a model with an exponential covariance function. We use the coefficient vector from the model in <a href="#eq-nonspatial-poisson" class="quarto-xref">Equation 1</a> as the starting value for <span class="math inline">\(\beta\)</span>. Since <span class="math inline">\(\sigma^2\)</span> is the variance of a spatial random effect, we use as its starting value the variance of the residuals from the model in <a href="#eq-nonspatial-poisson" class="quarto-xref">Equation 1</a>. The starting value for <span class="math inline">\(\phi\)</span> is the reciprocal of the distance at which spatial dependence seems to begin weakening in the empirical semivariogram above. Finally, we use zeros as the starting values for the spatial random effects <span class="math inline">\(w\)</span>.</p>
+<p>We fit a model with an exponential covariance function.</p>
+<ul>
+<li>We use the coefficient vector from the model in <a href="#eq-nonspatial-poisson" class="quarto-xref">Equation 1</a> as the starting value for <span class="math inline">\(\beta\)</span>.</li>
+<li>Since <span class="math inline">\(\sigma^2\)</span> is the variance of a spatial random effect, we use as its starting value the variance of the residuals from the model in <a href="#eq-nonspatial-poisson" class="quarto-xref">Equation 1</a>.</li>
+<li>The starting value for <span class="math inline">\(\phi\)</span> is the reciprocal of the distance at which spatial dependence seems to begin weakening in the empirical semivariogram above.</li>
+<li>Finally, we use zeros as the starting values for the spatial random effects <span class="math inline">\(w\)</span>.</li>
+</ul>
+<p>Unfortunately, the acceptance rate is close to zero. We’ve tried fiddling with the values of <code>starting</code>, <code>tuning</code>, and <code>priors</code> to increase the acceptance rate, but we haven’t found values that work well yet.</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>mod1_coefs <span class="ot">&lt;-</span> <span class="fu">coef</span>(mod1)</span>
-<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>mod1_resid_var <span class="ot">&lt;-</span> <span class="fu">var</span>(<span class="fu">resid</span>(mod1))</span>
-<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>mod3 <span class="ot">&lt;-</span> <span class="fu">spGLM</span>(</span>
-<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>    ALL <span class="sc">~</span> dist_to_water <span class="sc">+</span> num_nights <span class="sc">+</span> num_detectable_species,</span>
-<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">family =</span> <span class="st">&quot;poisson&quot;</span>,</span>
-<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">data =</span> jittered_data_for_mods,</span>
-<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">coords =</span> <span class="fu">as.matrix</span>(jittered_data_for_mods[<span class="fu">c</span>(<span class="st">&quot;Lat&quot;</span>, <span class="st">&quot;Long&quot;</span>)]),</span>
-<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">starting =</span> <span class="fu">list</span>(</span>
-<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a>        <span class="at">beta =</span> mod1_coefs, <span class="at">sigma.sq =</span> mod1_resid_var, <span class="at">phi =</span> <span class="dv">1</span>, <span class="at">w =</span> <span class="dv">0</span></span>
-<span id="cb32-10"><a href="#cb32-10" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb32-11"><a href="#cb32-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">tuning =</span> <span class="fu">list</span>(</span>
-<span id="cb32-12"><a href="#cb32-12" aria-hidden="true" tabindex="-1"></a>        <span class="at">beta =</span> <span class="fu">rep</span>(<span class="dv">1</span>, <span class="fu">length</span>(mod1_coefs)),</span>
-<span id="cb32-13"><a href="#cb32-13" aria-hidden="true" tabindex="-1"></a>        <span class="at">sigma.sq =</span> <span class="fl">0.01</span> <span class="sc">*</span> mod1_resid_var,</span>
-<span id="cb32-14"><a href="#cb32-14" aria-hidden="true" tabindex="-1"></a>        <span class="at">phi =</span> <span class="dv">1</span>,</span>
-<span id="cb32-15"><a href="#cb32-15" aria-hidden="true" tabindex="-1"></a>        <span class="at">w =</span> <span class="dv">0</span></span>
-<span id="cb32-16"><a href="#cb32-16" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb32-17"><a href="#cb32-17" aria-hidden="true" tabindex="-1"></a>    <span class="at">priors =</span> <span class="fu">list</span>(</span>
-<span id="cb32-18"><a href="#cb32-18" aria-hidden="true" tabindex="-1"></a>        <span class="at">sigma.sq.ig =</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="fl">0.01</span> <span class="sc">*</span> mod1_resid_var),</span>
-<span id="cb32-19"><a href="#cb32-19" aria-hidden="true" tabindex="-1"></a>        <span class="at">phi.unif =</span> <span class="fu">c</span>(<span class="fl">0.01</span>, <span class="dv">10</span>),</span>
-<span id="cb32-20"><a href="#cb32-20" aria-hidden="true" tabindex="-1"></a>        <span class="at">beta.norm =</span> <span class="fu">list</span>(mod1_coefs, <span class="fl">0.1</span> <span class="sc">*</span> <span class="fu">abs</span>(mod1_coefs))</span>
-<span id="cb32-21"><a href="#cb32-21" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb32-22"><a href="#cb32-22" aria-hidden="true" tabindex="-1"></a>    <span class="at">cov.model =</span> <span class="st">&quot;exponential&quot;</span>,</span>
-<span id="cb32-23"><a href="#cb32-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">n.samples =</span> <span class="dv">5000</span>,</span>
-<span id="cb32-24"><a href="#cb32-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">verbose =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb32-25"><a href="#cb32-25" aria-hidden="true" tabindex="-1"></a>    <span class="at">n.report =</span> <span class="dv">100</span></span>
-<span id="cb32-26"><a href="#cb32-26" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb31"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>mod1_coefs <span class="ot">&lt;-</span> <span class="fu">coef</span>(mod1)</span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>mod1_resid_var <span class="ot">&lt;-</span> <span class="fu">var</span>(<span class="fu">resid</span>(mod1))</span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>mod3 <span class="ot">&lt;-</span> <span class="fu">spGLM</span>(</span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>    ALL <span class="sc">~</span> dist_to_water <span class="sc">+</span> num_nights <span class="sc">+</span> num_detectable_species,</span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">family =</span> <span class="st">&quot;poisson&quot;</span>,</span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">data =</span> jittered_data_for_mods,</span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">coords =</span> <span class="fu">as.matrix</span>(jittered_data_for_mods[<span class="fu">c</span>(<span class="st">&quot;Lat&quot;</span>, <span class="st">&quot;Long&quot;</span>)]),</span>
+<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">starting =</span> <span class="fu">list</span>(</span>
+<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a>        <span class="at">beta =</span> mod1_coefs, <span class="at">sigma.sq =</span> mod1_resid_var, <span class="at">phi =</span> <span class="fl">0.5</span>, <span class="at">w =</span> <span class="dv">0</span></span>
+<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">tuning =</span> <span class="fu">list</span>(</span>
+<span id="cb31-12"><a href="#cb31-12" aria-hidden="true" tabindex="-1"></a>        <span class="at">beta =</span> <span class="fl">0.1</span> <span class="sc">*</span> <span class="fu">abs</span>(mod1_coefs),</span>
+<span id="cb31-13"><a href="#cb31-13" aria-hidden="true" tabindex="-1"></a>        <span class="at">sigma.sq =</span> <span class="fl">0.1</span> <span class="sc">*</span> mod1_resid_var,</span>
+<span id="cb31-14"><a href="#cb31-14" aria-hidden="true" tabindex="-1"></a>        <span class="at">phi =</span> <span class="fl">0.001</span>,</span>
+<span id="cb31-15"><a href="#cb31-15" aria-hidden="true" tabindex="-1"></a>        <span class="at">w =</span> <span class="dv">0</span></span>
+<span id="cb31-16"><a href="#cb31-16" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb31-17"><a href="#cb31-17" aria-hidden="true" tabindex="-1"></a>    <span class="at">priors =</span> <span class="fu">list</span>(</span>
+<span id="cb31-18"><a href="#cb31-18" aria-hidden="true" tabindex="-1"></a>        <span class="at">sigma.sq.ig =</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="dv">3</span> <span class="sc">*</span> mod1_resid_var),</span>
+<span id="cb31-19"><a href="#cb31-19" aria-hidden="true" tabindex="-1"></a>        <span class="at">phi.unif =</span> <span class="fu">c</span>(<span class="fl">0.1</span>, <span class="dv">1</span>),</span>
+<span id="cb31-20"><a href="#cb31-20" aria-hidden="true" tabindex="-1"></a>        <span class="at">beta.normal =</span> <span class="fu">list</span>(mod1_coefs, <span class="fl">0.33</span> <span class="sc">*</span> <span class="fu">sqrt</span>(<span class="fu">abs</span>(mod1_coefs)))</span>
+<span id="cb31-21"><a href="#cb31-21" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb31-22"><a href="#cb31-22" aria-hidden="true" tabindex="-1"></a>    <span class="at">cov.model =</span> <span class="st">&quot;exponential&quot;</span>,</span>
+<span id="cb31-23"><a href="#cb31-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">n.samples =</span> <span class="dv">5000</span>,</span>
+<span id="cb31-24"><a href="#cb31-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">verbose =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb31-25"><a href="#cb31-25" aria-hidden="true" tabindex="-1"></a>    <span class="at">n.report =</span> <span class="dv">100</span></span>
+<span id="cb31-26"><a href="#cb31-26" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>----------------------------------------
     General model description
@@ -3639,22 +3639,25 @@ Using the exponential spatial correlation model.
 Number of MCMC samples 5000.
 
 Priors and hyperpriors:
-    beta flat.
+    beta normal:
+        mu: 6.827   -0.000  0.012   0.122   
+        sd: 0.862   0.007   0.036   0.115   
 
-    sigma.sq IG hyperpriors shape=2.00000 and scale=56.43278
 
-    phi Unif hyperpriors a=0.01000 and b=10.00000
+    sigma.sq IG hyperpriors shape=2.00000 and scale=16929.83376
+
+    phi Unif hyperpriors a=0.10000 and b=1.00000
 
 Metropolis tuning values:
     beta tuning:
-    1.000   0.000   0.000   0.000   
-    0.000   1.000   0.000   0.000   
-    0.000   0.000   1.000   0.000   
-    0.000   0.000   0.000   1.000   
+    0.683   0.000   0.000   0.000   
+    0.000   0.000   0.000   0.000   
+    0.000   0.000   0.001   0.000   
+    0.000   0.000   0.000   0.012   
 
-    sigma.sq tuning: 7.51218
+    sigma.sq tuning: 23.75558
 
-    phi tuning: 1.00000
+    phi tuning: 0.03162
 
 Metropolis starting values:
     beta starting:
@@ -3662,206 +3665,206 @@ Metropolis starting values:
 
     sigma.sq starting: 5643.27792
 
-    phi starting: 1.00000
+    phi starting: 0.50000
 
 -------------------------------------------------
         Sampling
 -------------------------------------------------
 Sampled: 100 of 5000, 2.00%
-Report interval Metrop. Acceptance rate: 3.00%
-Overall Metrop. Acceptance rate: 3.00%
+Report interval Metrop. Acceptance rate: 7.00%
+Overall Metrop. Acceptance rate: 7.00%
 -------------------------------------------------
 Sampled: 200 of 5000, 4.00%
-Report interval Metrop. Acceptance rate: 2.00%
-Overall Metrop. Acceptance rate: 2.50%
+Report interval Metrop. Acceptance rate: 1.00%
+Overall Metrop. Acceptance rate: 4.00%
 -------------------------------------------------
 Sampled: 300 of 5000, 6.00%
-Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 1.67%
+Report interval Metrop. Acceptance rate: 1.00%
+Overall Metrop. Acceptance rate: 3.00%
 -------------------------------------------------
 Sampled: 400 of 5000, 8.00%
-Report interval Metrop. Acceptance rate: 1.00%
-Overall Metrop. Acceptance rate: 1.50%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 2.25%
 -------------------------------------------------
 Sampled: 500 of 5000, 10.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 1.20%
+Overall Metrop. Acceptance rate: 1.80%
 -------------------------------------------------
 Sampled: 600 of 5000, 12.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 1.00%
+Overall Metrop. Acceptance rate: 1.50%
 -------------------------------------------------
 Sampled: 700 of 5000, 14.00%
 Report interval Metrop. Acceptance rate: 1.00%
-Overall Metrop. Acceptance rate: 1.00%
+Overall Metrop. Acceptance rate: 1.43%
 -------------------------------------------------
 Sampled: 800 of 5000, 16.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.88%
+Overall Metrop. Acceptance rate: 1.25%
 -------------------------------------------------
 Sampled: 900 of 5000, 18.00%
-Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.78%
+Report interval Metrop. Acceptance rate: 1.00%
+Overall Metrop. Acceptance rate: 1.22%
 -------------------------------------------------
 Sampled: 1000 of 5000, 20.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.70%
+Overall Metrop. Acceptance rate: 1.10%
 -------------------------------------------------
 Sampled: 1100 of 5000, 22.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.64%
+Overall Metrop. Acceptance rate: 1.00%
 -------------------------------------------------
 Sampled: 1200 of 5000, 24.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.58%
+Overall Metrop. Acceptance rate: 0.92%
 -------------------------------------------------
 Sampled: 1300 of 5000, 26.00%
-Report interval Metrop. Acceptance rate: 1.00%
-Overall Metrop. Acceptance rate: 0.62%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.85%
 -------------------------------------------------
 Sampled: 1400 of 5000, 28.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.57%
+Overall Metrop. Acceptance rate: 0.79%
 -------------------------------------------------
 Sampled: 1500 of 5000, 30.00%
-Report interval Metrop. Acceptance rate: 1.00%
-Overall Metrop. Acceptance rate: 0.60%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.73%
 -------------------------------------------------
 Sampled: 1600 of 5000, 32.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.56%
+Overall Metrop. Acceptance rate: 0.69%
 -------------------------------------------------
 Sampled: 1700 of 5000, 34.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.53%
+Overall Metrop. Acceptance rate: 0.65%
 -------------------------------------------------
 Sampled: 1800 of 5000, 36.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.50%
+Overall Metrop. Acceptance rate: 0.61%
 -------------------------------------------------
 Sampled: 1900 of 5000, 38.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.47%
+Overall Metrop. Acceptance rate: 0.58%
 -------------------------------------------------
 Sampled: 2000 of 5000, 40.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.45%
+Overall Metrop. Acceptance rate: 0.55%
 -------------------------------------------------
 Sampled: 2100 of 5000, 42.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.43%
+Overall Metrop. Acceptance rate: 0.52%
 -------------------------------------------------
 Sampled: 2200 of 5000, 44.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.41%
+Overall Metrop. Acceptance rate: 0.50%
 -------------------------------------------------
 Sampled: 2300 of 5000, 46.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.39%
+Overall Metrop. Acceptance rate: 0.48%
 -------------------------------------------------
 Sampled: 2400 of 5000, 48.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.38%
+Overall Metrop. Acceptance rate: 0.46%
 -------------------------------------------------
 Sampled: 2500 of 5000, 50.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.36%
+Overall Metrop. Acceptance rate: 0.44%
 -------------------------------------------------
 Sampled: 2600 of 5000, 52.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.35%
+Overall Metrop. Acceptance rate: 0.42%
 -------------------------------------------------
 Sampled: 2700 of 5000, 54.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.33%
+Overall Metrop. Acceptance rate: 0.41%
 -------------------------------------------------
 Sampled: 2800 of 5000, 56.00%
-Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.32%
+Report interval Metrop. Acceptance rate: 1.00%
+Overall Metrop. Acceptance rate: 0.43%
 -------------------------------------------------
 Sampled: 2900 of 5000, 58.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.31%
+Overall Metrop. Acceptance rate: 0.41%
 -------------------------------------------------
 Sampled: 3000 of 5000, 60.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.30%
+Overall Metrop. Acceptance rate: 0.40%
 -------------------------------------------------
 Sampled: 3100 of 5000, 62.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.29%
+Overall Metrop. Acceptance rate: 0.39%
 -------------------------------------------------
 Sampled: 3200 of 5000, 64.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.28%
+Overall Metrop. Acceptance rate: 0.38%
 -------------------------------------------------
 Sampled: 3300 of 5000, 66.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.27%
+Overall Metrop. Acceptance rate: 0.36%
 -------------------------------------------------
 Sampled: 3400 of 5000, 68.00%
-Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.26%
+Report interval Metrop. Acceptance rate: 1.00%
+Overall Metrop. Acceptance rate: 0.38%
 -------------------------------------------------
 Sampled: 3500 of 5000, 70.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.26%
+Overall Metrop. Acceptance rate: 0.37%
 -------------------------------------------------
 Sampled: 3600 of 5000, 72.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.25%
+Overall Metrop. Acceptance rate: 0.36%
 -------------------------------------------------
 Sampled: 3700 of 5000, 74.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.24%
+Overall Metrop. Acceptance rate: 0.35%
 -------------------------------------------------
 Sampled: 3800 of 5000, 76.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.24%
+Overall Metrop. Acceptance rate: 0.34%
 -------------------------------------------------
 Sampled: 3900 of 5000, 78.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.23%
+Overall Metrop. Acceptance rate: 0.33%
 -------------------------------------------------
 Sampled: 4000 of 5000, 80.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.23%
+Overall Metrop. Acceptance rate: 0.33%
 -------------------------------------------------
 Sampled: 4100 of 5000, 82.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.22%
+Overall Metrop. Acceptance rate: 0.32%
 -------------------------------------------------
 Sampled: 4200 of 5000, 84.00%
-Report interval Metrop. Acceptance rate: 1.00%
-Overall Metrop. Acceptance rate: 0.24%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.31%
 -------------------------------------------------
 Sampled: 4300 of 5000, 86.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.23%
+Overall Metrop. Acceptance rate: 0.30%
 -------------------------------------------------
 Sampled: 4400 of 5000, 88.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.23%
+Overall Metrop. Acceptance rate: 0.30%
 -------------------------------------------------
 Sampled: 4500 of 5000, 90.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.22%
+Overall Metrop. Acceptance rate: 0.29%
 -------------------------------------------------
 Sampled: 4600 of 5000, 92.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.22%
+Overall Metrop. Acceptance rate: 0.28%
 -------------------------------------------------
 Sampled: 4700 of 5000, 94.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.21%
+Overall Metrop. Acceptance rate: 0.28%
 -------------------------------------------------
 Sampled: 4800 of 5000, 96.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.21%
+Overall Metrop. Acceptance rate: 0.27%
 -------------------------------------------------
 Sampled: 4900 of 5000, 98.00%
 Report interval Metrop. Acceptance rate: 0.00%
-Overall Metrop. Acceptance rate: 0.20%
+Overall Metrop. Acceptance rate: 0.27%
 -------------------------------------------------
 Sampled: 5000 of 5000, 100.00%
 -------------------------------------------------</code></pre>

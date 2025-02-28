@@ -171,8 +171,7 @@ samples %>%
 
 We next compute the empirical semivariogram of the residuals from the model in @eq-nonspatial-poisson. Since there are replicates for some sites, we need to jitter the coordinates to make things work. We use 100 bins to compute the empirical semivariogram.
 ```{r}
-#| message: FALSE
-#| warning: FALSE
+#| output: FALSE
 
 mod1_variogram <- bind_cols(data_for_mods, mod1_fitted_vals_resids) %>%
     select("Long", "Lat", "resid") %>%
@@ -237,7 +236,14 @@ jittered_data_for_mods <- mutate(
 )
 ```
 
-We fit a model with an exponential covariance function. We use the coefficient vector from the model in @eq-nonspatial-poisson as the starting value for $\beta$. Since $\sigma^2$ is the variance of a spatial random effect, we use as its starting value the variance of the residuals from the model in @eq-nonspatial-poisson. The starting value for $\phi$ is the reciprocal of the distance at which spatial dependence seems to begin weakening in the empirical semivariogram above. Finally, we use zeros as the starting values for the spatial random effects $w$.
+We fit a model with an exponential covariance function.
+
+- We use the coefficient vector from the model in @eq-nonspatial-poisson as the starting value for $\beta$.
+- Since $\sigma^2$ is the variance of a spatial random effect, we use as its starting value the variance of the residuals from the model in @eq-nonspatial-poisson.
+- The starting value for $\phi$ is the reciprocal of the distance at which spatial dependence seems to begin weakening in the empirical semivariogram above.
+- Finally, we use zeros as the starting values for the spatial random effects $w$.
+
+Unfortunately, the acceptance rate is close to zero. We've tried fiddling with the values of `starting`, `tuning`, and `priors` to increase the acceptance rate, but we haven't found values that work well yet.
 ```{r}
 mod1_coefs <- coef(mod1)
 mod1_resid_var <- var(resid(mod1))
@@ -247,18 +253,18 @@ mod3 <- spGLM(
     data = jittered_data_for_mods,
     coords = as.matrix(jittered_data_for_mods[c("Lat", "Long")]),
     starting = list(
-        beta = mod1_coefs, sigma.sq = mod1_resid_var, phi = 1, w = 0
+        beta = mod1_coefs, sigma.sq = mod1_resid_var, phi = 0.5, w = 0
     ),
     tuning = list(
-        beta = rep(1, length(mod1_coefs)),
-        sigma.sq = 0.01 * mod1_resid_var,
-        phi = 1,
+        beta = 0.1 * abs(mod1_coefs),
+        sigma.sq = 0.1 * mod1_resid_var,
+        phi = 0.001,
         w = 0
     ),
     priors = list(
-        sigma.sq.ig = c(2, 0.01 * mod1_resid_var),
-        phi.unif = c(0.01, 10),
-        beta.norm = list(mod1_coefs, 0.1 * abs(mod1_coefs))
+        sigma.sq.ig = c(2, 3 * mod1_resid_var),
+        phi.unif = c(0.1, 1),
+        beta.normal = list(mod1_coefs, 0.33 * sqrt(abs(mod1_coefs)))
     ),
     cov.model = "exponential",
     n.samples = 5000,
