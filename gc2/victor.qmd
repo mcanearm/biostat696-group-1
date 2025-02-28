@@ -237,16 +237,28 @@ jittered_data_for_mods <- mutate(
 )
 ```
 
-We fit a model with an exponential covariance function.
+We fit a model with an exponential covariance function. We use the coefficient vector from the model in @eq-nonspatial-poisson as the starting value for $\beta$. Since $\sigma^2$ is the variance of a spatial random effect, we use as its starting value the variance of the residuals from the model in @eq-nonspatial-poisson. The starting value for $\phi$ is the reciprocal of the distance at which spatial dependence seems to begin weakening in the empirical semivariogram above. Finally, we use zeros as the starting values for the spatial random effects $w$.
 ```{r}
+mod1_coefs <- coef(mod1)
+mod1_resid_var <- var(resid(mod1))
 mod3 <- spGLM(
     ALL ~ dist_to_water + num_nights + num_detectable_species,
     family = "poisson",
     data = jittered_data_for_mods,
     coords = as.matrix(jittered_data_for_mods[c("Lat", "Long")]),
-    starting = list(beta = coef(mod1), sigma.sq = 1, phi = 1, w = 0),
-    tuning = list(beta = rep(1, 4), sigma.sq = 0.1, phi = 0.01, w = 0),
-    priors = list(sigma.sq.ig = c(2, 1), phi.unif = c(0.01, 10)
+    starting = list(
+        beta = mod1_coefs, sigma.sq = mod1_resid_var, phi = 1, w = 0
+    ),
+    tuning = list(
+        beta = rep(1, length(mod1_coefs)),
+        sigma.sq = 0.01 * mod1_resid_var,
+        phi = 1,
+        w = 0
+    ),
+    priors = list(
+        sigma.sq.ig = c(2, 0.01 * mod1_resid_var),
+        phi.unif = c(0.01, 10),
+        beta.norm = list(mod1_coefs, 0.1 * abs(mod1_coefs))
     ),
     cov.model = "exponential",
     n.samples = 5000,
@@ -254,4 +266,7 @@ mod3 <- spGLM(
     n.report = 100
 )
 ```
+
+
+
 

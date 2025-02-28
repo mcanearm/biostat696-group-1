@@ -3598,22 +3598,34 @@ Number of Fisher Scoring iterations: 6</code></pre>
 <span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">Lat =</span> <span class="fu">jitter</span>(Lat, <span class="at">factor =</span> <span class="fl">1e-4</span>), <span class="at">Long =</span> <span class="fu">jitter</span>(Long, <span class="at">factor =</span> <span class="fl">1e-4</span>)</span>
 <span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<p>We fit a model with an exponential covariance function.</p>
+<p>We fit a model with an exponential covariance function. We use the coefficient vector from the model in <a href="#eq-nonspatial-poisson" class="quarto-xref">Equation 1</a> as the starting value for <span class="math inline">\(\beta\)</span>. Since <span class="math inline">\(\sigma^2\)</span> is the variance of a spatial random effect, we use as its starting value the variance of the residuals from the model in <a href="#eq-nonspatial-poisson" class="quarto-xref">Equation 1</a>. The starting value for <span class="math inline">\(\phi\)</span> is the reciprocal of the distance at which spatial dependence seems to begin weakening in the empirical semivariogram above. Finally, we use zeros as the starting values for the spatial random effects <span class="math inline">\(w\)</span>.</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>mod3 <span class="ot">&lt;-</span> <span class="fu">spGLM</span>(</span>
-<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>    ALL <span class="sc">~</span> dist_to_water <span class="sc">+</span> num_nights <span class="sc">+</span> num_detectable_species,</span>
-<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">family =</span> <span class="st">&quot;poisson&quot;</span>,</span>
-<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">data =</span> jittered_data_for_mods,</span>
-<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">coords =</span> <span class="fu">as.matrix</span>(jittered_data_for_mods[<span class="fu">c</span>(<span class="st">&quot;Lat&quot;</span>, <span class="st">&quot;Long&quot;</span>)]),</span>
-<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">starting =</span> <span class="fu">list</span>(<span class="at">beta =</span> <span class="fu">coef</span>(mod1), <span class="at">sigma.sq =</span> <span class="dv">1</span>, <span class="at">phi =</span> <span class="dv">1</span>, <span class="at">w =</span> <span class="dv">0</span>),</span>
-<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">tuning =</span> <span class="fu">list</span>(<span class="at">beta =</span> <span class="fu">rep</span>(<span class="dv">1</span>, <span class="dv">4</span>), <span class="at">sigma.sq =</span> <span class="fl">0.1</span>, <span class="at">phi =</span> <span class="fl">0.01</span>, <span class="at">w =</span> <span class="dv">0</span>),</span>
-<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">priors =</span> <span class="fu">list</span>(<span class="at">sigma.sq.ig =</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="dv">1</span>), <span class="at">phi.unif =</span> <span class="fu">c</span>(<span class="fl">0.01</span>, <span class="dv">10</span>)</span>
-<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb32-10"><a href="#cb32-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">cov.model =</span> <span class="st">&quot;exponential&quot;</span>,</span>
-<span id="cb32-11"><a href="#cb32-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">n.samples =</span> <span class="dv">5000</span>,</span>
-<span id="cb32-12"><a href="#cb32-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">verbose =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb32-13"><a href="#cb32-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">n.report =</span> <span class="dv">100</span></span>
-<span id="cb32-14"><a href="#cb32-14" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>mod1_coefs <span class="ot">&lt;-</span> <span class="fu">coef</span>(mod1)</span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>mod1_resid_var <span class="ot">&lt;-</span> <span class="fu">var</span>(<span class="fu">resid</span>(mod1))</span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>mod3 <span class="ot">&lt;-</span> <span class="fu">spGLM</span>(</span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>    ALL <span class="sc">~</span> dist_to_water <span class="sc">+</span> num_nights <span class="sc">+</span> num_detectable_species,</span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">family =</span> <span class="st">&quot;poisson&quot;</span>,</span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">data =</span> jittered_data_for_mods,</span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">coords =</span> <span class="fu">as.matrix</span>(jittered_data_for_mods[<span class="fu">c</span>(<span class="st">&quot;Lat&quot;</span>, <span class="st">&quot;Long&quot;</span>)]),</span>
+<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">starting =</span> <span class="fu">list</span>(</span>
+<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a>        <span class="at">beta =</span> mod1_coefs, <span class="at">sigma.sq =</span> mod1_resid_var, <span class="at">phi =</span> <span class="dv">1</span>, <span class="at">w =</span> <span class="dv">0</span></span>
+<span id="cb32-10"><a href="#cb32-10" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb32-11"><a href="#cb32-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">tuning =</span> <span class="fu">list</span>(</span>
+<span id="cb32-12"><a href="#cb32-12" aria-hidden="true" tabindex="-1"></a>        <span class="at">beta =</span> <span class="fu">rep</span>(<span class="dv">1</span>, <span class="fu">length</span>(mod1_coefs)),</span>
+<span id="cb32-13"><a href="#cb32-13" aria-hidden="true" tabindex="-1"></a>        <span class="at">sigma.sq =</span> <span class="fl">0.01</span> <span class="sc">*</span> mod1_resid_var,</span>
+<span id="cb32-14"><a href="#cb32-14" aria-hidden="true" tabindex="-1"></a>        <span class="at">phi =</span> <span class="dv">1</span>,</span>
+<span id="cb32-15"><a href="#cb32-15" aria-hidden="true" tabindex="-1"></a>        <span class="at">w =</span> <span class="dv">0</span></span>
+<span id="cb32-16"><a href="#cb32-16" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb32-17"><a href="#cb32-17" aria-hidden="true" tabindex="-1"></a>    <span class="at">priors =</span> <span class="fu">list</span>(</span>
+<span id="cb32-18"><a href="#cb32-18" aria-hidden="true" tabindex="-1"></a>        <span class="at">sigma.sq.ig =</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="fl">0.01</span> <span class="sc">*</span> mod1_resid_var),</span>
+<span id="cb32-19"><a href="#cb32-19" aria-hidden="true" tabindex="-1"></a>        <span class="at">phi.unif =</span> <span class="fu">c</span>(<span class="fl">0.01</span>, <span class="dv">10</span>),</span>
+<span id="cb32-20"><a href="#cb32-20" aria-hidden="true" tabindex="-1"></a>        <span class="at">beta.norm =</span> <span class="fu">list</span>(mod1_coefs, <span class="fl">0.1</span> <span class="sc">*</span> <span class="fu">abs</span>(mod1_coefs))</span>
+<span id="cb32-21"><a href="#cb32-21" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb32-22"><a href="#cb32-22" aria-hidden="true" tabindex="-1"></a>    <span class="at">cov.model =</span> <span class="st">&quot;exponential&quot;</span>,</span>
+<span id="cb32-23"><a href="#cb32-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">n.samples =</span> <span class="dv">5000</span>,</span>
+<span id="cb32-24"><a href="#cb32-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">verbose =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb32-25"><a href="#cb32-25" aria-hidden="true" tabindex="-1"></a>    <span class="at">n.report =</span> <span class="dv">100</span></span>
+<span id="cb32-26"><a href="#cb32-26" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>----------------------------------------
     General model description
@@ -3629,7 +3641,7 @@ Number of MCMC samples 5000.
 Priors and hyperpriors:
     beta flat.
 
-    sigma.sq IG hyperpriors shape=2.00000 and scale=1.00000
+    sigma.sq IG hyperpriors shape=2.00000 and scale=56.43278
 
     phi Unif hyperpriors a=0.01000 and b=10.00000
 
@@ -3640,15 +3652,15 @@ Metropolis tuning values:
     0.000   0.000   1.000   0.000   
     0.000   0.000   0.000   1.000   
 
-    sigma.sq tuning: 0.31623
+    sigma.sq tuning: 7.51218
 
-    phi tuning: 0.10000
+    phi tuning: 1.00000
 
 Metropolis starting values:
     beta starting:
         6.827   -0.000  0.012   0.122   
 
-    sigma.sq starting: 1.00000
+    sigma.sq starting: 5643.27792
 
     phi starting: 1.00000
 
