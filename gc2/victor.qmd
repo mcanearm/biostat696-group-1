@@ -1,0 +1,127 @@
+---
+title: "Victor's Analysis"
+format:
+    html:
+        embed-resources: true
+---
+
+```{r}
+#| label: "setup"
+#| message: FALSE
+
+here::i_am("gc2/victor.qmd")
+
+library(conflicted)
+library(here)
+library(tidyverse)
+conflicts_prefer(dplyr::filter, dplyr::lag)
+
+data <- read_csv(here("data/processed/annual_bat_counts.csv"))
+
+theme_set(theme_bw())
+```
+
+There's one record for each pair of `AcousticSite` and `Year`.
+```{r}
+data %>% count(AcousticSite, Year) %>% filter(n > 1)
+```
+
+Most sites only have data for a single year.
+```{r}
+data %>%
+    count(AcousticSite, name = "num_years") %>%
+    count(num_years, name = "num_sites")
+```
+
+Below is another summary that shows that most sites only have data for one year.
+```{r}
+data %>%
+    group_by(AcousticSite) %>%
+    summarize(years = str_c(Year, collapse = ",")) %>%
+    count(years, sort = TRUE, name = "num_sites")
+```
+
+More sites have data for `r count(data, Year, sort = TRUE)$Year[1]` than for any other year.
+```{r}
+count(data, Year, sort = TRUE, name = "num_sites")
+```
+
+For each site-year pair, we count the number of species that could be detected at the site in the year.
+```{r}
+num_detectable_species <- data %>%
+    select(ends_with("_meta")) %>%
+    apply(1, function(r) sum(r == "yes"))
+```
+
+We create a dataset that we can fit models to. There is one record for each site-year pair. The response is `ALL`, the number of detections across all species. `Lat` and `Long` will be used as spatial covariates. We will use `dist_to_water`, the number of nights on which the detectors were operational, and the number of detectable species as non-spatial covariates.
+```{r}
+data_for_mods <- data %>%
+    select(
+        AcousticSite, Year,
+        ALL,
+        Lat, Long,
+        dist_to_water, starts_with("nights_")
+    ) %>%
+    pivot_longer(
+        starts_with("nights_"),
+        names_to = "num_nights_year", names_prefix = "nights_",
+        values_to = "num_nights"
+    ) %>%
+    filter(Year == num_nights_year) %>%
+    select(!num_nights_year) %>%
+    add_column(num_detectable_species)
+```
+
+```{r}
+mod1 <- glm(
+    ALL ~ dist_to_water + num_nights + num_detectable_species,
+    poisson,
+    data_for_mods
+)
+summary(mod1)
+```
+
+```{r}
+tibble(fitted_val = fitted(mod1), squared_resid = resid(mod1)^2) %>%
+    ggplot(aes(fitted_val, squared_resid)) +
+    geom_point(alpha = 0.3) +
+    geom_abline(linetype = "dashed", slope = 1, intercept = 0) +
+    labs(x = "Fitted Value", y = "Squared Residual") +
+    theme_bw()
+```
+
+```{r}
+tibble(sqrt_fitted_val = sqrt(fitted(mod1)), abs_resid = abs(resid(mod1))) %>%
+    ggplot(aes(sqrt_fitted_val, abs_resid)) +
+    geom_point(alpha = 0.3) +
+    geom_abline(linetype = "dashed", slope = 1, intercept = 0) +
+    labs(x = expression(sqrt("Fitted Value")), y = "Absolute Residual") +
+    theme_bw()
+```
+
+```{r}
+mod2 <- glm(
+    ALL ~ dist_to_water + num_nights + num_detectable_species,
+    quasipoisson,
+    data_for_mods
+)
+summary(mod2)
+```
+
+```{r}
+tibble(fitted_val = fitted(mod2), squared_resid = resid(mod2)^2) %>%
+    ggplot(aes(fitted_val, squared_resid)) +
+    geom_point(alpha = 0.3) +
+    geom_abline(linetype = "dashed", slope = 1, intercept = 0) +
+    labs(x = "Fitted Value", y = "Squared Residual") +
+    theme_bw()
+```
+
+```{r}
+tibble(sqrt_fitted_val = sqrt(fitted(mod2)), abs_resid = abs(resid(mod2))) %>%
+    ggplot(aes(sqrt_fitted_val, abs_resid)) +
+    geom_point(alpha = 0.3) +
+    geom_abline(linetype = "dashed", slope = 1, intercept = 0) +
+    labs(x = expression(sqrt("Fitted Value")), y = "Absolute Residual") +
+    theme_bw()
+```
