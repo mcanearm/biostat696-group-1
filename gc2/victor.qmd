@@ -14,6 +14,7 @@ format:
 here::i_am("gc2/victor.qmd")
 
 library(conflicted)
+library(geoR)
 library(here)
 library(spBayes)
 library(tidyverse)
@@ -167,6 +168,28 @@ samples %>%
     geom_density() +
     labs(x = "Response", y = "Density", color = "Data Type")
 ```
+
+We next compute the empirical semivariogram of the residuals from the model in @eq-nonspatial-poisson. Since there are replicates for some sites, we need to jitter the coordinates to make things work. We use 100 bins to compute the empirical semivariogram.
+```{r}
+#| message: FALSE
+#| warning: FALSE
+
+mod1_variogram <- bind_cols(data_for_mods, mod1_fitted_vals_resids) %>%
+    select("Long", "Lat", "resid") %>%
+    as.geodata() %>%
+    jitterDupCoords(max = 1e-4) %>%
+    variog(uvec = 100, messages = FALSE)
+```
+The empirical semivariogram suggests spatial dependence only over small distances. We can try fitting a Poisson regression model with spatial random effects.
+```{r}
+mod1_variogram %>%
+    plot(
+        type = "o",
+        main = "Empirical Semivariogram of Residuals",
+        xlab = "Distance", ylab = "Semivariance"
+    )
+```
+
 
 ## A Quasi-Poisson Regression Model
 
