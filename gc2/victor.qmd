@@ -22,6 +22,8 @@ conflicts_prefer(dplyr::filter, dplyr::lag)
 data <- read_csv(here("data/processed/annual_bat_counts.csv"))
 
 theme_set(theme_bw())
+
+set.seed(1)
 ```
 
 # Preparation of the Data for Model-Building
@@ -79,6 +81,8 @@ data_for_mods <- data %>%
 
 # Models without Spatial Random Effects
 
+## A Poisson Regression Model
+
 We first fit a Poisson regression model without overdispersion or underdispersion. Under the model, at any location $s$,
 $$
 Y(s) \sim \text{Poisson}(\exp\{\beta_0 + X(s)^{\top}\beta\}),
@@ -100,7 +104,7 @@ Below is a summary of the fitted model.
 summary(mod1)
 ```
 
-Under the model in @eq-nonspatial-poisson, $\mathbb{E}(Y(s)) = \text{Var}(Y(s))$, or $\sqrt{\mathbb{E}(Y(s))} = \text{SD}(Y(s))$. We use the residuals to check whether this property of the model is reasonable. For the $i$th observation, which was recorded at location $s_i$, we compare $\sqrt{\widehat{\mathbb{E}}(Y(s_i))}$ to the absolute residual $|Y(s_i) - \widehat{Y}(s_i)|$; if the property is reasonable, then these two quantities should be similar. Below, we plot the absolute residual versus the square root of the fitted value. The two are equal along the dashed line. The plot is ambiguous. For some observations, the absolute residual is much larger than expected, which suggests overdispersion. However, absolute residuals that aren't close to the line seem to be below it more often than above it, which suggests underdispersion.
+Under the model in @eq-nonspatial-poisson, $\mathbb{E}(Y(s)) = \text{Var}(Y(s))$, or $\sqrt{\mathbb{E}(Y(s))} = \text{SD}(Y(s))$. We use the residuals to check whether this property of the model is reasonable. For the $i$th observation, which was recorded at location $s_i$, we compare $\sqrt{\widehat{\mathbb{E}}(Y(s_i))}$ to the absolute residual $|Y(s_i) - \widehat{Y}(s_i)|$; if the property is reasonable, then these two quantities should be similar. Below, we plot the absolute residual versus the square root of the fitted value. The two are equal along the dashed line. For some observations, the absolute residual is much larger than expected. However, this isn't true systematically, so those observations may just be outliers. The absolute residuals that aren't close to the line seem to be below it more often than above it, which suggests underdispersion.
 ```{r}
 mod1_fitted_vals_resids %>%
     ggplot(aes(sqrt(fitted_val), abs(resid))) +
@@ -122,6 +126,49 @@ mod1_fitted_vals_resids %>%
         y = "Number of Observations"
     )
 ```
+
+Below is a function for computing the Pearson dispersion statistic.
+```{r}
+calc_pearson_disperse_stat <- function(mod) {
+    sum(resid(mod)^2 / fitted(mod)) / df.residual(mod)
+}
+```
+
+The Pearson dispersion statistic for the model in @eq-nonspatial-poisson is below.
+```{r}
+calc_pearson_disperse_stat(mod1)
+```
+
+To continue assessing the fit of the model, we generate 100 samples of counts under the model. We will compare how the counts in these samples are distributed to how the real counts are distributed.
+```{r}
+samples <- replicate(
+    100,
+    rpois(nrow(data_for_mods), mod1_fitted_vals_resids$fitted_val)
+) %>%
+    `colnames<-`(str_c("sample", 1:100)) %>%
+    as_tibble() %>%
+    pivot_longer(
+        everything(),
+        names_to = "sample", names_prefix = "sample",
+        values_to = "ALL"
+    ) %>%
+    bind_rows(tibble(sample = "0", ALL = data_for_mods$ALL), .)
+```
+
+In the plot below, there is one density estimate for each sample (the gray curves) as well as a density estimate for the real data (the blue curve). The tails look fairly similar, but the blue curve's peak is to the left of the gray curves' peaks. This suggests that the count under the model in @eq-nonspatial-poisson tends to be somewhat larger than it should be.
+```{r}
+samples %>%
+    mutate(is_real_data = sample == "0") %>%
+    ggplot(aes(ALL, group = sample, color = is_real_data)) +
+    scale_color_manual(
+        labels = c(`TRUE` = "Real", `FALSE` = "Simulated"),
+        values = c(`TRUE` = "blue", `FALSE` = "gray")
+    ) +
+    geom_density() +
+    labs(x = "Response", y = "Density", color = "Data Type")
+```
+
+## A Quasi-Poisson Regression Model
 
 We next try a Quasi-Poisson regression model, i.e., one for which the dispersion parameter is estimated instead of being fixed at one.
 ```{r}
@@ -149,3 +196,9 @@ mod2_fitted_vals_resids %>%
     labs(x = expression(sqrt("Fitted Value")), y = "Absolute Residual") +
     theme_bw()
 ```
+
+The Pearson dispersion statistic didn't change.
+```{r}
+calc_pearson_disperse_stat(mod2)
+```
+
