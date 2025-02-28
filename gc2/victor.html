@@ -3229,6 +3229,7 @@ window.Quarto = {
   <li><a href="#a-poisson-regression-model" id="toc-a-poisson-regression-model" class="nav-link" data-scroll-target="#a-poisson-regression-model"><span class="header-section-number">2.1</span> A Poisson Regression Model</a></li>
   <li><a href="#a-quasi-poisson-regression-model" id="toc-a-quasi-poisson-regression-model" class="nav-link" data-scroll-target="#a-quasi-poisson-regression-model"><span class="header-section-number">2.2</span> A Quasi-Poisson Regression Model</a></li>
   </ul></li>
+  <li><a href="#a-model-with-spatial-random-effects" id="toc-a-model-with-spatial-random-effects" class="nav-link" data-scroll-target="#a-model-with-spatial-random-effects"><span class="header-section-number">3</span> A Model with Spatial Random Effects</a></li>
   </ul>
 </nav>
 </div>
@@ -3586,6 +3587,274 @@ Number of Fisher Scoring iterations: 6</code></pre>
 </div>
 </div>
 </section>
+</section>
+<section id="a-model-with-spatial-random-effects" class="level1" data-number="3">
+<h1 data-number="3"><span class="header-section-number">3</span> A Model with Spatial Random Effects</h1>
+<p>Since the empirical semivariogram of the residuals for the Poisson regression model suggests spatial dependence over small distances, we next fit a Poisson regression model with spatial random effects.</p>
+<p>To avoid numerical issues, we jitter the coordinates of the sites.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb31"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>jittered_data_for_mods <span class="ot">&lt;-</span> <span class="fu">mutate</span>(</span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>    data_for_mods,</span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">Lat =</span> <span class="fu">jitter</span>(Lat, <span class="at">factor =</span> <span class="fl">1e-4</span>), <span class="at">Long =</span> <span class="fu">jitter</span>(Long, <span class="at">factor =</span> <span class="fl">1e-4</span>)</span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>We fit a model with an exponential covariance function.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a>mod3 <span class="ot">&lt;-</span> <span class="fu">spGLM</span>(</span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>    ALL <span class="sc">~</span> dist_to_water <span class="sc">+</span> num_nights <span class="sc">+</span> num_detectable_species,</span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">family =</span> <span class="st">&quot;poisson&quot;</span>,</span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">data =</span> jittered_data_for_mods,</span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">coords =</span> <span class="fu">as.matrix</span>(jittered_data_for_mods[<span class="fu">c</span>(<span class="st">&quot;Lat&quot;</span>, <span class="st">&quot;Long&quot;</span>)]),</span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">starting =</span> <span class="fu">list</span>(<span class="at">beta =</span> <span class="fu">coef</span>(mod1), <span class="at">sigma.sq =</span> <span class="dv">1</span>, <span class="at">phi =</span> <span class="dv">1</span>, <span class="at">w =</span> <span class="dv">0</span>),</span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">tuning =</span> <span class="fu">list</span>(<span class="at">beta =</span> <span class="fu">rep</span>(<span class="dv">1</span>, <span class="dv">4</span>), <span class="at">sigma.sq =</span> <span class="fl">0.1</span>, <span class="at">phi =</span> <span class="fl">0.01</span>, <span class="at">w =</span> <span class="dv">0</span>),</span>
+<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">priors =</span> <span class="fu">list</span>(<span class="at">sigma.sq.ig =</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="dv">1</span>), <span class="at">phi.unif =</span> <span class="fu">c</span>(<span class="fl">0.01</span>, <span class="dv">10</span>)</span>
+<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb32-10"><a href="#cb32-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">cov.model =</span> <span class="st">&quot;exponential&quot;</span>,</span>
+<span id="cb32-11"><a href="#cb32-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">n.samples =</span> <span class="dv">5000</span>,</span>
+<span id="cb32-12"><a href="#cb32-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">verbose =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb32-13"><a href="#cb32-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">n.report =</span> <span class="dv">100</span></span>
+<span id="cb32-14"><a href="#cb32-14" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>----------------------------------------
+    General model description
+----------------------------------------
+Model fit with 366 observations.
+
+Number of covariates 4 (including intercept if specified).
+
+Using the exponential spatial correlation model.
+
+Number of MCMC samples 5000.
+
+Priors and hyperpriors:
+    beta flat.
+
+    sigma.sq IG hyperpriors shape=2.00000 and scale=1.00000
+
+    phi Unif hyperpriors a=0.01000 and b=10.00000
+
+Metropolis tuning values:
+    beta tuning:
+    1.000   0.000   0.000   0.000   
+    0.000   1.000   0.000   0.000   
+    0.000   0.000   1.000   0.000   
+    0.000   0.000   0.000   1.000   
+
+    sigma.sq tuning: 0.31623
+
+    phi tuning: 0.10000
+
+Metropolis starting values:
+    beta starting:
+        6.827   -0.000  0.012   0.122   
+
+    sigma.sq starting: 1.00000
+
+    phi starting: 1.00000
+
+-------------------------------------------------
+        Sampling
+-------------------------------------------------
+Sampled: 100 of 5000, 2.00%
+Report interval Metrop. Acceptance rate: 3.00%
+Overall Metrop. Acceptance rate: 3.00%
+-------------------------------------------------
+Sampled: 200 of 5000, 4.00%
+Report interval Metrop. Acceptance rate: 2.00%
+Overall Metrop. Acceptance rate: 2.50%
+-------------------------------------------------
+Sampled: 300 of 5000, 6.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 1.67%
+-------------------------------------------------
+Sampled: 400 of 5000, 8.00%
+Report interval Metrop. Acceptance rate: 1.00%
+Overall Metrop. Acceptance rate: 1.50%
+-------------------------------------------------
+Sampled: 500 of 5000, 10.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 1.20%
+-------------------------------------------------
+Sampled: 600 of 5000, 12.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 1.00%
+-------------------------------------------------
+Sampled: 700 of 5000, 14.00%
+Report interval Metrop. Acceptance rate: 1.00%
+Overall Metrop. Acceptance rate: 1.00%
+-------------------------------------------------
+Sampled: 800 of 5000, 16.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.88%
+-------------------------------------------------
+Sampled: 900 of 5000, 18.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.78%
+-------------------------------------------------
+Sampled: 1000 of 5000, 20.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.70%
+-------------------------------------------------
+Sampled: 1100 of 5000, 22.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.64%
+-------------------------------------------------
+Sampled: 1200 of 5000, 24.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.58%
+-------------------------------------------------
+Sampled: 1300 of 5000, 26.00%
+Report interval Metrop. Acceptance rate: 1.00%
+Overall Metrop. Acceptance rate: 0.62%
+-------------------------------------------------
+Sampled: 1400 of 5000, 28.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.57%
+-------------------------------------------------
+Sampled: 1500 of 5000, 30.00%
+Report interval Metrop. Acceptance rate: 1.00%
+Overall Metrop. Acceptance rate: 0.60%
+-------------------------------------------------
+Sampled: 1600 of 5000, 32.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.56%
+-------------------------------------------------
+Sampled: 1700 of 5000, 34.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.53%
+-------------------------------------------------
+Sampled: 1800 of 5000, 36.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.50%
+-------------------------------------------------
+Sampled: 1900 of 5000, 38.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.47%
+-------------------------------------------------
+Sampled: 2000 of 5000, 40.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.45%
+-------------------------------------------------
+Sampled: 2100 of 5000, 42.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.43%
+-------------------------------------------------
+Sampled: 2200 of 5000, 44.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.41%
+-------------------------------------------------
+Sampled: 2300 of 5000, 46.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.39%
+-------------------------------------------------
+Sampled: 2400 of 5000, 48.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.38%
+-------------------------------------------------
+Sampled: 2500 of 5000, 50.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.36%
+-------------------------------------------------
+Sampled: 2600 of 5000, 52.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.35%
+-------------------------------------------------
+Sampled: 2700 of 5000, 54.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.33%
+-------------------------------------------------
+Sampled: 2800 of 5000, 56.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.32%
+-------------------------------------------------
+Sampled: 2900 of 5000, 58.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.31%
+-------------------------------------------------
+Sampled: 3000 of 5000, 60.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.30%
+-------------------------------------------------
+Sampled: 3100 of 5000, 62.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.29%
+-------------------------------------------------
+Sampled: 3200 of 5000, 64.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.28%
+-------------------------------------------------
+Sampled: 3300 of 5000, 66.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.27%
+-------------------------------------------------
+Sampled: 3400 of 5000, 68.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.26%
+-------------------------------------------------
+Sampled: 3500 of 5000, 70.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.26%
+-------------------------------------------------
+Sampled: 3600 of 5000, 72.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.25%
+-------------------------------------------------
+Sampled: 3700 of 5000, 74.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.24%
+-------------------------------------------------
+Sampled: 3800 of 5000, 76.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.24%
+-------------------------------------------------
+Sampled: 3900 of 5000, 78.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.23%
+-------------------------------------------------
+Sampled: 4000 of 5000, 80.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.23%
+-------------------------------------------------
+Sampled: 4100 of 5000, 82.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.22%
+-------------------------------------------------
+Sampled: 4200 of 5000, 84.00%
+Report interval Metrop. Acceptance rate: 1.00%
+Overall Metrop. Acceptance rate: 0.24%
+-------------------------------------------------
+Sampled: 4300 of 5000, 86.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.23%
+-------------------------------------------------
+Sampled: 4400 of 5000, 88.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.23%
+-------------------------------------------------
+Sampled: 4500 of 5000, 90.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.22%
+-------------------------------------------------
+Sampled: 4600 of 5000, 92.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.22%
+-------------------------------------------------
+Sampled: 4700 of 5000, 94.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.21%
+-------------------------------------------------
+Sampled: 4800 of 5000, 96.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.21%
+-------------------------------------------------
+Sampled: 4900 of 5000, 98.00%
+Report interval Metrop. Acceptance rate: 0.00%
+Overall Metrop. Acceptance rate: 0.20%
+-------------------------------------------------
+Sampled: 5000 of 5000, 100.00%
+-------------------------------------------------</code></pre>
+</div>
+</div>
 </section>
 
 </main>

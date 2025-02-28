@@ -225,3 +225,33 @@ The Pearson dispersion statistic didn't change.
 calc_pearson_disperse_stat(mod2)
 ```
 
+# A Model with Spatial Random Effects
+
+Since the empirical semivariogram of the residuals for the Poisson regression model suggests spatial dependence over small distances, we next fit a Poisson regression model with spatial random effects.
+
+To avoid numerical issues, we jitter the coordinates of the sites.
+```{r}
+jittered_data_for_mods <- mutate(
+    data_for_mods,
+    Lat = jitter(Lat, factor = 1e-4), Long = jitter(Long, factor = 1e-4)
+)
+```
+
+We fit a model with an exponential covariance function.
+```{r}
+mod3 <- spGLM(
+    ALL ~ dist_to_water + num_nights + num_detectable_species,
+    family = "poisson",
+    data = jittered_data_for_mods,
+    coords = as.matrix(jittered_data_for_mods[c("Lat", "Long")]),
+    starting = list(beta = coef(mod1), sigma.sq = 1, phi = 1, w = 0),
+    tuning = list(beta = rep(1, 4), sigma.sq = 0.1, phi = 0.01, w = 0),
+    priors = list(sigma.sq.ig = c(2, 1), phi.unif = c(0.01, 10)
+    ),
+    cov.model = "exponential",
+    n.samples = 5000,
+    verbose = TRUE,
+    n.report = 100
+)
+```
+
