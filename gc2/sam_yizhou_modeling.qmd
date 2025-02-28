@@ -57,7 +57,10 @@ data_long <- data |>
 # Visualize the spatial distribution of mean sightings per night by species (Great Lakes region only)
 ```{r}
 sightings_df <- data_long |>
-    mutate(SightingsPerNight = count / nights)
+    mutate(sightings_per_night = count / nights) |>
+    group_by(AcousticSite, Year) |>
+    mutate(num_detectable_species = n()-1) |>
+    ungroup()
 ```
 
 It is difficult to discern any patterns in the spatial variation of the mean number of sightings per night by species.
@@ -67,32 +70,32 @@ michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "W
 
 sightings_df |>
     ggplot() +
-    geom_point(size = .8, aes(x = Long, y = Lat, fill = SightingsPerNight)) +
+    geom_point(size = .8, aes(x = Long, y = Lat, fill = count)) +
     geom_sf(data = michiganplus, fill = "white", color = "black") +
     coord_sf(ylim = c(41, 49), xlim = c(-77, -91)) +
     facet_wrap(~ Species, nrow = 2) +
     theme_minimal() +
     scale_fill_scico(palette="batlowK") +
-    ggtitle("Mean Sightings Per Night at Each Station by Species (Great Lakes Region)")
+    ggtitle("Total Sightings at Each Station by Species (Great Lakes Region)")
 ```
 
-A histogram of total sightings by station suggests outliers for >= 100 sightings per night.
+A histogram of total sightings by station suggests outliers for >= 10000 sightings.
 ```{r}
-hist(sightings_df$SightingsPerNight)
+hist(sightings_df$count)
 ```
 
-The lack of a clear spatial pattern continues even when we filter out seeming outliers in the number of mean sightings per night.
+The lack of a clear spatial pattern continues even when we filter out seeming outliers in the number of total sightings.
 ```{r}
 sightings_df |>
-    filter(SightingsPerNight <= 100) |>
+    filter(count <= 10000) |>
     ggplot() +
-    geom_point(size = .8, aes(x = Long, y = Lat, fill = SightingsPerNight)) +
+    geom_point(size = .8, aes(x = Long, y = Lat, fill = sightings_per_night)) +
     geom_sf(data = michiganplus, fill = "white", color = "black") +
     coord_sf(ylim = c(41, 49), xlim = c(-77, -91)) +
     facet_wrap(~ Species, nrow = 2) +
     theme_minimal() +
     scale_fill_scico(palette="batlowK") +
-    ggtitle("Mean Sightings Per Night at Each Station by Species (Great Lakes Region)", subtitle = "Sightings/night >100 removed")
+    ggtitle("Total Sightings at Each Station by Species (Great Lakes Region)", subtitle = "Sightings/night >100 removed")
 ```
 
 # Visualize the empirical semivariogram of total sightings by species
@@ -107,8 +110,8 @@ for(sp in unique(sightings_df$Species)){
     sp_data <- sightings_df |> filter(Species == sp)
     # Plot the semivariogram for each species
     sv <- sp_data %>% with(geoR::variog(
-      data = SightingsPerNight, coords = cbind(Long, Lat), 
-      uvec = 30, messages=FALSE
+      data = count, coords = cbind(Long, Lat), 
+      uvec = 20, messages=FALSE
     ))
     sv_df <- data.frame(species = sp, dists = sv$u, variogram = sv$v, npairs = sv$n, sd = sv$sd)
     sv_data <- rbind(sv_data, sv_df)
@@ -124,7 +127,7 @@ ggplot(sv_data, aes(x=dists, y=variogram)) +
 # Modeling
 
 ## Simple linear model (all species)
-Here, we fit a simple linear model using distance to the nearest body of water as the only covariate. Looking at the covariogram for the residuals, indicates a strong need to account for spatial correlation in the data via a model such as a Gaussian process (GP).
+Here, we fit a simple linear model using distance to the nearest body of water, number of active nights per year, and number of species tracked as covariates. Looking at the covariogram for the residuals, indicates a strong need to account for spatial correlation in the data via a model such as a Gaussian process (GP).
 ```{r}
 #| message: FALSE
 #| 
@@ -133,13 +136,18 @@ lm_simple_resid_sv <- data.frame(
 )
 for(sp in unique(sightings_df$Species)){
     sp_data <- sightings_df |> filter(Species == sp)
-    lin_model <- lm(log1p(SightingsPerNight) ~ dist_to_water, data = sp_data)
+    # Only use number of species detected if response is counts across all species
+    if(sp == "ALL"){
+      lin_model <- lm(log1p(count) ~ dist_to_water + nights + num_detectable_species, data = sp_data)
+    } else{
+      lin_model <- lm(log1p(count) ~ dist_to_water + nights, data = sp_data)
+    }
     sp_data$resid <- lin_model$residuals
     print(paste0(paste0(sp, " residual variance: "), var(sp_data$resid)))
     # Plot the semivariogram for each species
     sv <- sp_data %>% with(geoR::variog(
       data = resid, coords = cbind(Long, Lat), 
-      uvec = 30, messages=FALSE
+      uvec = 10, messages=FALSE
     ))
     sv_df <- data.frame(species = sp, dists = sv$u, variogram = sv$v, npairs = sv$n, sd = sv$sd)
     lm_simple_resid_sv <- rbind(lm_simple_resid_sv, sv_df)
@@ -165,20 +173,20 @@ all_sp_data_pseudo_dedup <- all_sp_data |> mutate(
 )
 
 # GP setup
-n.samples <- 5000
+n.samples <- 7500
 starting <- list("phi"=3/0.5, "sigma.sq"=50, "tau.sq"=5)
 tuning <- list("phi"=0.4, "sigma.sq"=0.1, "tau.sq"=0.1)
 priors <- list(
-    "beta.Norm"=list(rep(0, 1), diag(1000, 1)),
-    "phi.Unif"=c(3/1, 3/(0.1 * 1)), 
-    "sigma.sq.IG"=c(2, 1.56 / 2), # Center around residual variance
-    "tau.sq.IG"=c(2, 0.1 * 1.56) # Assume 10% of variance is due to noise
+    "beta.Norm"=list(rep(0, 3), diag(1000, 3)),
+    "phi.Unif"=c(3/(1 * 1), 3/(0.1 * 1)), 
+    "sigma.sq.IG"=c(2, 2.4 / 2), # Center around residual variance
+    "tau.sq.IG"=c(2, 0.1 * 2.4) # Assume 10% of variance is due to noise
 )
 cov.model <- "exponential"
 
 # Fit model on "ALL" species, using slightly perturbed Lat/Long data.
 gp_model <- spLM(
-    log1p(SightingsPerNight) ~ dist_to_water - 1, data = all_sp_data_pseudo_dedup, 
+    log1p(count) ~ dist_to_water + nights + num_detectable_species - 1, data = all_sp_data_pseudo_dedup, 
     coords = as.matrix(all_sp_data_pseudo_dedup[,c("Long_jitter", "Lat_jitter")]), 
     starting = starting, tuning = tuning, priors = priors, 
     cov.model = cov.model, n.samples = n.samples, verbose = FALSE, n.report = 500
@@ -193,7 +201,10 @@ ts.plot(gp_fit$p.theta.recover.samples[,1], main = "sigma^2", ylab = "")
 ts.plot(gp_fit$p.theta.recover.samples[,2], main = "tau^2", ylab = "")
 ts.plot(gp_fit$p.theta.recover.samples[,3], main = "phi", ylab = "")
 
-# Check ACF plots and effective sample size
+# Check ACF plots 
 autocorr.plot(as.mcmc(gp_fit$p.theta.recover.samples))
+
+# Check acceptance rates and effective sample size
+gp_fit$acceptance
 effectiveSize(as.mcmc(gp_fit$p.theta.recover.samples))
 ```
