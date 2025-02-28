@@ -15,6 +15,8 @@ library(scico)
 library(sf)
 library(rnaturalearth)
 library(geoR)
+library(spBayes)
+library(coda)
 conflicts_prefer(dplyr::filter, dplyr::lag)
 
 data <- read.csv(here("data/processed/annual_bat_counts.csv")) 
@@ -101,7 +103,7 @@ sightings_df |>
 sv_data <- data.frame(
     species = character(), dists = numeric(), variogram = numeric(), npairs = numeric(), sd = numeric()
 )
-for(sp in unique(data_long$Species)){
+for(sp in unique(sightings_df$Species)){
     sp_data <- sightings_df |> filter(Species == sp)
     # Plot the semivariogram for each species
     sv <- sp_data %>% with(geoR::variog(
@@ -117,4 +119,81 @@ ggplot(sv_data, aes(x=dists, y=variogram)) +
     theme_minimal() + 
     xlab("Distances") +
     ylab("Variogram")
+```
+
+# Modeling
+
+## Simple linear model (all species)
+Here, we fit a simple linear model using distance to the nearest body of water as the only covariate. Looking at the covariogram for the residuals, indicates a strong need to account for spatial correlation in the data via a model such as a Gaussian process (GP).
+```{r}
+#| message: FALSE
+#| 
+lm_simple_resid_sv <- data.frame(
+    species = character(), dists = numeric(), variogram = numeric(), npairs = numeric(), sd = numeric()
+)
+for(sp in unique(sightings_df$Species)){
+    sp_data <- sightings_df |> filter(Species == sp)
+    lin_model <- lm(log1p(SightingsPerNight) ~ dist_to_water, data = sp_data)
+    sp_data$resid <- lin_model$residuals
+    print(paste0(paste0(sp, " residual variance: "), var(sp_data$resid)))
+    # Plot the semivariogram for each species
+    sv <- sp_data %>% with(geoR::variog(
+      data = resid, coords = cbind(Long, Lat), 
+      uvec = 30, messages=FALSE
+    ))
+    sv_df <- data.frame(species = sp, dists = sv$u, variogram = sv$v, npairs = sv$n, sd = sv$sd)
+    lm_simple_resid_sv <- rbind(lm_simple_resid_sv, sv_df)
+}
+
+ggplot(lm_simple_resid_sv, aes(x=dists, y=variogram)) + 
+    geom_point(size=2, shape=8) +
+    facet_wrap(~ species, nrow = 2, scales = "free") +
+    theme_minimal() + 
+    xlab("Distances") +
+    ylab("Variogram")
+```
+
+## Bayesian Linear Model with Gaussian Process
+Recognizing that the simple linear model was insufficient, we now fit a Bayesian linear model with a exponential GP correlation structure.
+```{r}
+all_sp_data <- sightings_df |> filter(Species == "ALL")
+# Psuedo-deduplicate replicates by adding tiny noise.
+# Noise is on the order of 10^-6 degrees ~= ~0.11m.
+all_sp_data_pseudo_dedup <- all_sp_data |> mutate(
+    Long_jitter = jitter(Long, amount = 1e-6),
+    Lat_jitter = jitter(Lat, amount = 1e-6)
+)
+
+# GP setup
+n.samples <- 5000
+starting <- list("phi"=3/0.5, "sigma.sq"=50, "tau.sq"=5)
+tuning <- list("phi"=0.4, "sigma.sq"=0.1, "tau.sq"=0.1)
+priors <- list(
+    "beta.Norm"=list(rep(0, 1), diag(1000, 1)),
+    "phi.Unif"=c(3/1, 3/(0.1 * 1)), 
+    "sigma.sq.IG"=c(2, 1.56 / 2), # Center around residual variance
+    "tau.sq.IG"=c(2, 0.1 * 1.56) # Assume 10% of variance is due to noise
+)
+cov.model <- "exponential"
+
+# Fit model on "ALL" species, using slightly perturbed Lat/Long data.
+gp_model <- spLM(
+    log1p(SightingsPerNight) ~ dist_to_water - 1, data = all_sp_data_pseudo_dedup, 
+    coords = as.matrix(all_sp_data_pseudo_dedup[,c("Long_jitter", "Lat_jitter")]), 
+    starting = starting, tuning = tuning, priors = priors, 
+    cov.model = cov.model, n.samples = n.samples, verbose = FALSE, n.report = 500
+) 
+gp_fit <- gp_model %>% spRecover(start=round(n.samples/3), verbose=FALSE)
+
+## Check for MCMC convergence
+# Check trace plots
+par(mfrow=c(2,2))
+ts.plot(gp_fit$p.beta.recover.samples[,1], main = "beta", ylab = "")
+ts.plot(gp_fit$p.theta.recover.samples[,1], main = "sigma^2", ylab = "")
+ts.plot(gp_fit$p.theta.recover.samples[,2], main = "tau^2", ylab = "")
+ts.plot(gp_fit$p.theta.recover.samples[,3], main = "phi", ylab = "")
+
+# Check ACF plots and effective sample size
+autocorr.plot(as.mcmc(gp_fit$p.theta.recover.samples))
+effectiveSize(as.mcmc(gp_fit$p.theta.recover.samples))
 ```
