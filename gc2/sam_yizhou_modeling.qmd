@@ -95,7 +95,6 @@ sightings_df |>
 
 # Visualize the empirical semivariogram of total sightings by species
 
-To create our semivariogram for each species, we have to merge the data and metadata to get the Latitude and Longitude information for the stations that track the species of interest.
 ```{r}
 #| message: FALSE
 #| 
@@ -106,7 +105,7 @@ for(sp in unique(data_long$Species)){
     sp_data <- sightings_df |> filter(Species == sp)
     # Plot the semivariogram for each species
     sv <- sp_data %>% with(geoR::variog(
-      data = SightingsPerNight, coords = cbind(Long, Lat, dist_to_water), 
+      data = SightingsPerNight, coords = cbind(Long, Lat), 
       uvec = 30, messages=FALSE
     ))
     sv_df <- data.frame(species = sp, dists = sv$u, variogram = sv$v, npairs = sv$n, sd = sv$sd)
