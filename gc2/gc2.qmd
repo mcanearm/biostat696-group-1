@@ -1,0 +1,455 @@
+---
+title: "GC1"
+author: 
+- "Yizhou Gu"
+- "Matthew McAnear"
+- "Sam Rosenberg"
+- "Victor Verma"
+format: beamer
+bibliography: references.bib
+execute:
+    echo: FALSE
+    fig-margin: TRUE 
+---
+
+
+```{r Data Input, warning=TRUE, message=FALSE}
+
+here::i_am("gc2/gc2.qmd")
+
+library(readxl)
+library(tidyverse)
+library(lubridate)
+library(here)
+library(conflicted)
+library(scico)
+library(sf)
+library(rnaturalearth)
+library(geoR)
+library(spBayes)
+library(coda)
+conflicts_prefer(dplyr::filter, dplyr::lag)
+
+theme_set(theme_bw())
+
+set.seed(1)
+```
+
+```{r}
+species_counts <- read_xlsx(
+    here("data/raw/USFWS_Bat_Acoustic_Data/NightlyPassCounts.xlsx")
+)
+sites <- read.csv(here("data/raw/Bat_Detector_Metadata/acoustic_sites.csv"))
+load(here("data/processed/data_metadata.RData"))
+
+bat_species_lookup <- list(
+    "EPTFUS" = "Big Brown Bat (Eptesicus fuscus)",
+    "LASBOR" = "Eastern Red Bat(Lasiurus borealis) ",
+    "LASCIN" = "Hoary Bat (Lasiurus cinereus)",
+    "LASNOC" = "Silver-Haired Bat (Lasionycteris noctivagans)",
+    "MYOLUC" = "Little Brown Bat (Myotis lucifugus)",
+    "PERSUB" = "Tri-Colored Bat (Perimyotis subflavus)",
+    "MYOSEP" = "Northern Long-Eared Bat (Myotis septentrionalis)",
+    "MYOLEI" = "Eastern Small-Footed Bat (Myotis leibii)",
+    "NYCHUM" = "Evening Bat (Nycticeius humeralis)",
+    "MYOSOD" = "Indiana Bat (Myotis sodalis)",
+    "TADBRA" = "Mexican Free-Tailed Bat (Tadarida brasiliensis)",
+    "ANTPAL" = "Pallid Bat (Antrozous pallidus)",
+    "CORRAF" = "Rafinesque's Big-Eared Bat (Corynorhinus rafinesquii)",
+    "LASINT" = "Northern Yellow Bat (Lasiurus intermedius)",
+    "ALL" = "All Species"
+)
+```
+
+
+# EDA
+
+Get the sum of counts for each species by and site.
+
+```{r}
+sum_counts_by_year <- species_counts %>%
+    group_by(site = AcousticSite) %>%
+    summarize(across(all_of(names(bat_species_lookup)), ~ sum(.x, na.rm = TRUE)))
+
+utils::head(sum_counts_by_year)
+```
+
+Now, we merge in the site metadata. This contains the site name, location (lat/lon), the number of detector nights
+by year, and which bat species the detector is set up to detect.
+
+```{r}
+utils::head(sites)
+```
+
+Let's collapse all detector nights to be a single value across all years.
+```{r}
+sites$detectorNights <- rowSums(sites[, startsWith(colnames(sites), "X")])
+select_cols <- c(
+    "AcousticSite", "detectorNights", "Long", "Lat",
+    names(bat_species_lookup)[1:length(bat_species_lookup) - 1] # exclude "ALL"
+)
+sites_subset <- sites[, select_cols]
+```
+
+
+```{r}
+bat_count_cols <- c(
+    sprintf("%s.counts", names(bat_species_lookup)[1:length(bat_species_lookup) - 1]),
+    "ALL"
+)
+output_df <- sum_counts_by_year %>%
+    left_join(
+        sites_subset,
+        by = join_by(x$site == y$AcousticSite),
+        suffix = c(".counts", ".site")
+    ) %>% mutate(
+        mean_count = across(all_of(bat_count_cols), ~ .x / detectorNights)
+    )
+
+# mutate(output_df, mean_count = across(all_of(bat_count_cols), ~ .x / detectorNights))
+# colnames(output_df)
+write.csv(
+    output_df,
+    file = "../data/bat_counts_and_sites.csv",
+    row.names = FALSE
+)
+```
+
+
+# GC 1 Tasks
+## Data Description
+
+* **Source of the data. Link, citation.**  
+  * US Fish and Wildlife Service Acoustic Bat dataset [@usfws_bat_acoustic_data].
+  * Data has been aggregated to be the sum of bat counts by species and year at each monitoring site.
+
+* **Overall data description (number of observations, number of variables)**
+  * The cleaned data has 18,869 observations of 17 variables.
+
+* **Are there missing data? Is there a pattern or an intuitive reason for the missingness?**
+  * There is quite a bit of missing data - the sensors are only equipped to detect certain species of bats, and the sensors are only active for certain nights of the year.
+  * The number of nights is included, so we could normalize the data to be the mean number of bats of each species detected per night.
+
+---
+
+## Descriptive Statistics
+* **What is in the dataset? Describe each column. Summary statistics. Correlation analysis (non-spatial is ok). Preliminary data analysis using methods that you know**
+
+* **Make summary figures based on non-spatial descriptive statistics**
+
+---
+
+## Spatial Data
+
+* **Describe the spatial component of the data: what is the spatial domain, its dimension, how are observations indexed in space? Do you think modeling covariance as decaying with distance is appropriate?**    
+  * The Great Lakes region is the spatial domain.
+  * Dimensions are $\mathcal{D}^2$, and observations are indexed by latitude and longitude.
+
+---
+
+## Empirical Covariogram
+* **Visualize the empirical covariogram for the variable of interest. Does the variogram suggest spatial dependence in the data?**
+  * The covariograms suggest wildly differing spatial dependences across bat species when ignoring temporal variation, including both positive and negative spatial dependence.  
+  
+```{r}
+#| message: FALSE
+#| fig-margin: TRUE
+#| fig-height: 4.5
+miss_spec <- c("ANTPAL", "CORRAF", "LASINT", "TADBRA")
+
+vis_data <- data |> 
+    select(-one_of(miss_spec)) 
+species <- setdiff(names(vis_data), c("AcousticSite", "NightOf", "ALL", miss_spec))
+
+vis_metadata <- metadata |> 
+    select(-one_of(miss_spec)) |>
+    group_by(AcousticSite, Lat, Long, across(all_of(species))) |>
+    summarise(detectorNights = sum(across(all_of(as.character(2010:2018))))) |>
+    ungroup()
+
+sv_data <- data.frame(
+    species = character(), dists = numeric(), variogram = numeric(), npairs = numeric(), sd = numeric()
+)
+for(sp in species){
+    # Metadata for the stations relevant to the species of interest
+    vis_metadata_sub <- vis_metadata |> 
+        filter(.data[[sp]] == "yes") |>
+        select(AcousticSite, Long, Lat, detectorNights) 
+    # Get total sightings across years for each station
+    sp_data <- inner_join(vis_data, vis_metadata_sub, "AcousticSite") |>
+        group_by(AcousticSite, Long, Lat, detectorNights) |>
+        summarise(TotalSightings = sum(.data[[sp]])) |>
+        mutate(SightingsPerNight = TotalSightings / detectorNights)
+    # Plot the semivariogram for each species
+    sv <- sp_data %>% with(geoR::variog(data = SightingsPerNight, coords = cbind(Long, Lat), uvec = 30,  messages=FALSE))
+    sv_df <- data.frame(species = sp, dists = sv$u, variogram = sv$v, npairs = sv$n, sd = sv$sd)
+    sv_data <- rbind(sv_data, sv_df)
+}
+ggplot(sv_data, aes(x=dists, y=variogram)) + 
+    geom_point(size=2, shape=8) +
+    facet_wrap(~ species, nrow = 2, scales = "free") +
+    theme_minimal() + 
+    xlab("Distances") +
+    ylab("Variogram")
+```
+
+---
+
+## Spatial Visualization
+
+* **Map the data. Map the spatial variables, and write short but meaningful captions for your figures.**
+  * It is difficult to discern any patterns in the spatial variation of the mean number of sightings per night by species. The lack of a clear spatial pattern continues even when we filter out seeming outliers in the number of mean number of mean sightings per night.  
+
+```{r}
+#| fig-margin: TRUE
+vis_metadata2 <- vis_metadata |> 
+    select(AcousticSite, Lat, Long, detectorNights)
+
+sightings_df <- vis_data |>
+    select(-NightOf) |>
+    group_by(AcousticSite) |>
+    summarise(across(everything(), sum)) |>
+    inner_join(vis_metadata2, "AcousticSite") |>
+    pivot_longer(
+        cols = all_of(species), names_to = "Species", values_to = "TotalSightings"
+    ) |>
+    mutate(SightingsPerNight = TotalSightings / detectorNights)
+
+mainmap <- ne_states(country = c("united states of america", "canada"), returnclass = "sf")
+michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia"))
+
+sightings_df |>
+    ggplot() +
+    geom_point(size = .8, aes(x = Long, y = Lat, fill = SightingsPerNight)) +
+    geom_sf(data = michiganplus, fill = "white", color = "black") +
+    coord_sf(ylim = c(41, 49), xlim = c(-77, -91)) +
+    facet_wrap(~ Species, nrow = 2) +
+    theme_minimal() +
+    scale_fill_scico(palette="batlowK") +
+    ggtitle("Mean Sightings Per Night at Each Station by Species")
+```
+
+---
+
+## Spatial Visualization
+
+* **Map the data. Map the spatial variables, and write short but meaningful captions for your figures.**
+  * The lack of a clear spatial pattern continues even when we filter out seeming outliers in the number of mean number of mean sightings per night.  
+
+```{r}
+#| fig-margin: TRUE
+sightings_df |>
+    filter(SightingsPerNight <= 100) |>
+    ggplot() +
+    geom_point(size = .8, aes(x = Long, y = Lat, fill = SightingsPerNight)) +
+    geom_sf(data = michiganplus, fill = "white", color = "black") +
+    coord_sf(ylim = c(41, 49), xlim = c(-77, -91)) +
+    facet_wrap(~ Species, nrow = 2) +
+    theme_minimal() +
+    scale_fill_scico(palette="batlowK") +
+    ggtitle("Mean Sightings Per Night at Each Station by Species", subtitle = "(Sightings/night >100 removed)")
+```
+
+---
+
+## Spatial Dependence
+* **How do you imagine spatial dependence may play a role between the variables in the dataset?**
+  * There will be a large spatial dependence in the count of bats for nearby detectors. We expect that because certain species each have limited ranges that are spatially determined by habitat factors, then the individual sensors are likely to pick up only certain bats, and therefore nearby sensors should see similar counts of bats.
+
+---
+
+## Possible Research Questions
+* **What are some research questions that these data could help answer (at least one for each dataset)?**
+    * Which bat species have the largest or most stable ranges in the Great Lakes?
+    * How have these counts for bats changed over time? We have a spatiotemporal dataset and can be much more granular if needed.
+    * Many of the monitoring stations are closer to the lakeshore - can we estimate the inland distribution of bats?
+
+---
+
+## A Potential DAG
+* **Write an intuitive directed acyclic graphical model outlining the important variables, the parameters, and how they could be related to each other (no need for other assumptions – keep it simple)**
+
+---
+
+## Anticipated Results, Potential Problems, and Additional Data
+* **What are the potential results that you may anticipate?**
+
+* **What are some potential pitfalls or shortcomings of your model?**
+
+* **What additional data could be useful for the purpose of your analysis?**
+
+---
+
+# GC 2 Tasks
+```{r}
+data <- read_csv(here("data/processed/annual_bat_counts.csv"))
+```
+
+## Preparation of the Data for Model-Building
+
+There's one record for each pair of `AcousticSite` and `Year`.
+```{r}
+data %>% count(AcousticSite, Year) %>% filter(n > 1)
+```
+
+Most sites only have data for a single year.
+```{r}
+data %>%
+    count(AcousticSite, name = "num_years") %>%
+    count(num_years, name = "num_sites")
+```
+
+Below is another summary that shows that most sites only have data for one year.
+```{r}
+data %>%
+    group_by(AcousticSite) %>%
+    summarize(years = str_c(Year, collapse = ",")) %>%
+    count(years, sort = TRUE, name = "num_sites")
+```
+
+More sites have data for `r count(data, Year, sort = TRUE)$Year[1]` than for any other year.
+```{r}
+count(data, Year, sort = TRUE, name = "num_sites")
+```
+
+For each site-year pair, we count the number of species that could be detected at the site in the year.
+```{r}
+num_detectable_species <- data %>%
+    select(ends_with("_meta")) %>%
+    apply(1, function(r) sum(r == "yes"))
+```
+
+We create a dataset that we can fit models to. There is one record for each site-year pair. The response is `ALL`, the number of detections across all species. `Lat` and `Long` will be used as spatial covariates. We will use `dist_to_water`, the number of nights on which the detectors were operational, and the number of detectable species as non-spatial covariates.
+```{r}
+data_for_mods <- data %>%
+    select(
+        AcousticSite, Year,
+        ALL,
+        Lat, Long,
+        dist_to_water, starts_with("nights_")
+    ) %>%
+    pivot_longer(
+        starts_with("nights_"),
+        names_to = "num_nights_year", names_prefix = "nights_",
+        values_to = "num_nights"
+    ) %>%
+    filter(Year == num_nights_year) %>%
+    select(!num_nights_year) %>%
+    add_column(num_detectable_species)
+```
+
+## Linear Models
+### Non-Spatial Linear Model
+To begin with, we fit a simple linear model of counts across all species. Under the model, at any location $s$, 
+$$
+\log(1 + Y(s)) \sim N(\beta_0 + X(s)^{\top} 
+\beta, \sigma^2),
+$$ {#eq-nonspatial-lm}
+where $X(s)$ is the vector whose components are the distance from $s$ to the shore, the number of operational nights, and the number of detectable species.
+
+The residual variance from the nonspatial linear model is ~2.4, which corresponds to about ~1.3 standard deviations on the logged counts scale.
+
+```{r}
+lm_nonspatial <- lm(
+  log1p(ALL) ~ dist_to_water + num_nights + num_detectable_species, data = data_for_mods
+)
+data_for_mods$resid <- lm_nonspatial$residuals
+print(paste0("Residual variance: ", var(data_for_mods$resid)))
+```
+
+The residuals show strong spatial correlation (with longitude and latitude as spatial coordinates), as demonstrated in the empirical semivariogram.
+
+```{r}
+lm_nonspatial_sv <- data_for_mods %>% with(geoR::variog(
+    data = resid, coords = cbind(Long, Lat), 
+    uvec = 10, messages=FALSE
+))
+lm_nonspatial_sv_df <- data.frame(
+  dists = lm_nonspatial_sv$u, variogram = lm_nonspatial_sv$v, 
+  npairs = lm_nonspatial_sv$n, sd = lm_nonspatial_sv$sd
+)
+
+ggplot(lm_nonspatial_sv_df, aes(x=dists, y=variogram)) + 
+    geom_point(size=2, shape=8) +
+    theme_minimal() + 
+    xlab("Distances") +
+    ylab("Variogram")
+```
+
+### Linear Model with Spatial Covariance
+Noting that the spatial dependence that was not aptly captured by the simple linear model, we instead consider a spatial Gaussian process model. Under the model, at any location $s$,
+$$
+\log(1 + Y(s)) \sim GP(\beta_0 + X(s)^{\top} 
+\beta, \tau^2 I_n + C_{\theta}(\cdot)),
+$$ {#eq-spatial-lm}
+where $X(s)$ is as above.
+
+For our choice of covariance kernel function, we use an exponential covariance, 
+$$
+C_{\sigma^2, \phi}(s,s') = \sigma^2 \exp\{-\phi ||s - s'||_2\},
+$$
+where $\sigma^2$ and $\phi$ are parameters to be fitted.
+
+Note that the spBayes package runs into computational issues with fitting when observations have spatial replicates, so we pre-process the data by jittering and adding slight noise on the order of $10^{-6}$ degrees (about $0.11$ m).
+
+```{r}
+# Pseudo-deduplicate data
+data_for_mods_pseudo_dedup <- data_for_mods |> mutate(
+    Long_jitter = jitter(Long, amount = 1e-6),
+    Lat_jitter = jitter(Lat, amount = 1e-6)
+)
+
+# GP setup
+n.samples <- 7500
+starting <- list("phi"=3/0.5, "sigma.sq"=50, "tau.sq"=5)
+tuning <- list("phi"=0.4, "sigma.sq"=0.1, "tau.sq"=0.1)
+priors <- list(
+    "beta.Norm"=list(rep(0, 3), diag(1000, 3)),
+    "phi.Unif"=c(3/(1 * 1), 3/(0.1 * 1)), 
+    "sigma.sq.IG"=c(2, 2.4 / 2), # Center around residual variance
+    "tau.sq.IG"=c(2, 0.1 * 2.4) # Assume 10% of variance is due to noise
+)
+cov.model <- "exponential"
+
+# Fit model on "ALL" species, using slightly perturbed Lat/Long data.
+lm_spatial <- spLM(
+    log1p(ALL) ~ dist_to_water + num_nights + num_detectable_species - 1, data = data_for_mods_pseudo_dedup, 
+    coords = as.matrix(data_for_mods_pseudo_dedup[,c("Long_jitter", "Lat_jitter")]), 
+    starting = starting, tuning = tuning, priors = priors, 
+    cov.model = cov.model, n.samples = n.samples, verbose = FALSE, n.report = 500
+) 
+lm_spatial_fit <- lm_spatial %>% spRecover(start=round(n.samples/3), verbose=FALSE)
+```
+
+With the model fit, we check diagnostics for Markov chain Monte Carlo (MCMC) convergence.
+
+To begin, we check the trace plots for convergence. We see that $\beta$, $\sigma^2$, and $\tau^2$ reach reasonable convergence, but $\phi$ has trouble converging. This remains true even when tweaking the prior parameters, starting values, and step sizes.
+
+
+```{r}
+# Check trace plots
+par(mfrow=c(2,2))
+ts.plot(lm_spatial_fit$p.beta.recover.samples[,1], main = "beta", ylab = "")
+ts.plot(lm_spatial_fit$p.theta.recover.samples[,1], main = "sigma^2", ylab = "")
+ts.plot(lm_spatial_fit$p.theta.recover.samples[,2], main = "tau^2", ylab = "")
+ts.plot(lm_spatial_fit$p.theta.recover.samples[,3], main = "phi", ylab = "")
+```
+
+Likewise, looking at the autocorrelation function plots, we see that there is reasonably strong autocorrelation between $\phi$ posterior samples, even at lags of 20-30, indicating further issues with the MCMC fitting. 
+
+```{r}
+# Check ACF plots 
+autocorr.plot(as.mcmc(lm_spatial_fit$p.theta.recover.samples))
+```
+
+Looking further, we see we have acceptance rates of about 20\% and effective sample sizes of 100+ observations.
+
+```{r}
+# Check acceptance rates and effective sample size
+print(lm_spatial_fit$acceptance)
+print(effectiveSize(as.mcmc(lm_spatial_fit$p.theta.recover.samples)))
+```
+
+Given the poor convergence of the $\phi$ parameter, we are inclined to explore other models beyond the linear model, possibly such as Poisson regression models which are better suited for count data.
+
+# References

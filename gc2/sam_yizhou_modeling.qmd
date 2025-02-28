@@ -1,0 +1,210 @@
+---
+title: "sam_yizhou_modeling"
+format: html
+---
+
+```{r}
+#| label: "setup"
+#| message: FALSE
+
+here::i_am("gc2/sam_yizhou_modeling.qmd")
+library(conflicted)
+library(here)
+library(tidyverse)
+library(scico)
+library(sf)
+library(rnaturalearth)
+library(geoR)
+library(spBayes)
+library(coda)
+conflicts_prefer(dplyr::filter, dplyr::lag)
+
+data <- read.csv(here("data/processed/annual_bat_counts.csv")) 
+data <- data |> 
+    rename(ALL_count = ALL) |>
+    # Drops the mapping polygon information
+    select(
+        # Station and spatial information
+        AcousticSite, Lat, Long, dist_to_water, Year, 
+        # Counts, number of nights station on, and species tracked
+        ends_with("count"), starts_with("nights"), ends_with("meta")
+    ) |>
+    # Create new "nights" column, just corresponding to the value of nights_X, 
+    # where X is the value of the "Year" column
+    rowwise() %>%
+    mutate(nights = get(paste0("nights_", Year))) %>%
+    ungroup() |> 
+    select(-starts_with("nights_"))
+
+theme_set(theme_bw())
+```
+
+Now looking at the full dataset (not dropping stations), the ANTPAL, CORRAF, LASINT, TADBRA species are tracked, so we will no longer drop them for our subsequent analysis.
+
+```{r}
+data_long <- data |>
+    group_by(AcousticSite, Lat, Long, dist_to_water, Year) |>
+    pivot_longer(
+        cols = ends_with(c("_count", "_meta")), 
+        names_to = c("Species", ".value"),
+        names_sep = "_"
+    ) |>
+    mutate(meta = if_else(Species == "ALL", "yes", meta)) |>
+    filter(meta == "yes") |>
+    select(-meta)
+```
+
+# Visualize the spatial distribution of mean sightings per night by species (Great Lakes region only)
+```{r}
+sightings_df <- data_long |>
+    mutate(sightings_per_night = count / nights) |>
+    group_by(AcousticSite, Year) |>
+    mutate(num_detectable_species = n()-1) |>
+    ungroup()
+```
+
+It is difficult to discern any patterns in the spatial variation of the mean number of sightings per night by species.
+```{r}
+mainmap <- ne_states(country = c("united states of america", "canada"), returnclass = "sf")
+michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia"))
+
+sightings_df |>
+    ggplot() +
+    geom_point(size = .8, aes(x = Long, y = Lat, fill = count)) +
+    geom_sf(data = michiganplus, fill = "white", color = "black") +
+    coord_sf(ylim = c(41, 49), xlim = c(-77, -91)) +
+    facet_wrap(~ Species, nrow = 2) +
+    theme_minimal() +
+    scale_fill_scico(palette="batlowK") +
+    ggtitle("Total Sightings at Each Station by Species (Great Lakes Region)")
+```
+
+A histogram of total sightings by station suggests outliers for >= 10000 sightings.
+```{r}
+hist(sightings_df$count)
+```
+
+The lack of a clear spatial pattern continues even when we filter out seeming outliers in the number of total sightings.
+```{r}
+sightings_df |>
+    filter(count <= 10000) |>
+    ggplot() +
+    geom_point(size = .8, aes(x = Long, y = Lat, fill = sightings_per_night)) +
+    geom_sf(data = michiganplus, fill = "white", color = "black") +
+    coord_sf(ylim = c(41, 49), xlim = c(-77, -91)) +
+    facet_wrap(~ Species, nrow = 2) +
+    theme_minimal() +
+    scale_fill_scico(palette="batlowK") +
+    ggtitle("Total Sightings at Each Station by Species (Great Lakes Region)", subtitle = "Sightings/night >100 removed")
+```
+
+# Visualize the empirical semivariogram of total sightings by species
+
+```{r}
+#| message: FALSE
+#| 
+sv_data <- data.frame(
+    species = character(), dists = numeric(), variogram = numeric(), npairs = numeric(), sd = numeric()
+)
+for(sp in unique(sightings_df$Species)){
+    sp_data <- sightings_df |> filter(Species == sp)
+    # Plot the semivariogram for each species
+    sv <- sp_data %>% with(geoR::variog(
+      data = count, coords = cbind(Long, Lat), 
+      uvec = 20, messages=FALSE
+    ))
+    sv_df <- data.frame(species = sp, dists = sv$u, variogram = sv$v, npairs = sv$n, sd = sv$sd)
+    sv_data <- rbind(sv_data, sv_df)
+}
+ggplot(sv_data, aes(x=dists, y=variogram)) + 
+    geom_point(size=2, shape=8) +
+    facet_wrap(~ species, nrow = 2, scales = "free") +
+    theme_minimal() + 
+    xlab("Distances") +
+    ylab("Variogram")
+```
+
+# Modeling
+
+## Simple linear model (all species)
+Here, we fit a simple linear model using distance to the nearest body of water, number of active nights per year, and number of species tracked as covariates. Looking at the covariogram for the residuals, indicates a strong need to account for spatial correlation in the data via a model such as a Gaussian process (GP).
+```{r}
+#| message: FALSE
+#| 
+lm_simple_resid_sv <- data.frame(
+    species = character(), dists = numeric(), variogram = numeric(), npairs = numeric(), sd = numeric()
+)
+for(sp in unique(sightings_df$Species)){
+    sp_data <- sightings_df |> filter(Species == sp)
+    # Only use number of species detected if response is counts across all species
+    if(sp == "ALL"){
+      lin_model <- lm(log1p(count) ~ dist_to_water + nights + num_detectable_species, data = sp_data)
+    } else{
+      lin_model <- lm(log1p(count) ~ dist_to_water + nights, data = sp_data)
+    }
+    sp_data$resid <- lin_model$residuals
+    print(paste0(paste0(sp, " residual variance: "), var(sp_data$resid)))
+    # Plot the semivariogram for each species
+    sv <- sp_data %>% with(geoR::variog(
+      data = resid, coords = cbind(Long, Lat), 
+      uvec = 10, messages=FALSE
+    ))
+    sv_df <- data.frame(species = sp, dists = sv$u, variogram = sv$v, npairs = sv$n, sd = sv$sd)
+    lm_simple_resid_sv <- rbind(lm_simple_resid_sv, sv_df)
+}
+
+ggplot(lm_simple_resid_sv, aes(x=dists, y=variogram)) + 
+    geom_point(size=2, shape=8) +
+    facet_wrap(~ species, nrow = 2, scales = "free") +
+    theme_minimal() + 
+    xlab("Distances") +
+    ylab("Variogram")
+```
+
+## Bayesian Linear Model with Gaussian Process
+Recognizing that the simple linear model was insufficient, we now fit a Bayesian linear model with a exponential GP correlation structure.
+```{r}
+all_sp_data <- sightings_df |> filter(Species == "ALL")
+# Psuedo-deduplicate replicates by adding tiny noise.
+# Noise is on the order of 10^-6 degrees ~= ~0.11m.
+all_sp_data_pseudo_dedup <- all_sp_data |> mutate(
+    Long_jitter = jitter(Long, amount = 1e-6),
+    Lat_jitter = jitter(Lat, amount = 1e-6)
+)
+
+# GP setup
+n.samples <- 7500
+starting <- list("phi"=3/0.5, "sigma.sq"=50, "tau.sq"=5)
+tuning <- list("phi"=0.4, "sigma.sq"=0.1, "tau.sq"=0.1)
+priors <- list(
+    "beta.Norm"=list(rep(0, 3), diag(1000, 3)),
+    "phi.Unif"=c(3/(1 * 1), 3/(0.1 * 1)), 
+    "sigma.sq.IG"=c(2, 2.4 / 2), # Center around residual variance
+    "tau.sq.IG"=c(2, 0.1 * 2.4) # Assume 10% of variance is due to noise
+)
+cov.model <- "exponential"
+
+# Fit model on "ALL" species, using slightly perturbed Lat/Long data.
+gp_model <- spLM(
+    log1p(count) ~ dist_to_water + nights + num_detectable_species - 1, data = all_sp_data_pseudo_dedup, 
+    coords = as.matrix(all_sp_data_pseudo_dedup[,c("Long_jitter", "Lat_jitter")]), 
+    starting = starting, tuning = tuning, priors = priors, 
+    cov.model = cov.model, n.samples = n.samples, verbose = FALSE, n.report = 500
+) 
+gp_fit <- gp_model %>% spRecover(start=round(n.samples/3), verbose=FALSE)
+
+## Check for MCMC convergence
+# Check trace plots
+par(mfrow=c(2,2))
+ts.plot(gp_fit$p.beta.recover.samples[,1], main = "beta", ylab = "")
+ts.plot(gp_fit$p.theta.recover.samples[,1], main = "sigma^2", ylab = "")
+ts.plot(gp_fit$p.theta.recover.samples[,2], main = "tau^2", ylab = "")
+ts.plot(gp_fit$p.theta.recover.samples[,3], main = "phi", ylab = "")
+
+# Check ACF plots 
+autocorr.plot(as.mcmc(gp_fit$p.theta.recover.samples))
+
+# Check acceptance rates and effective sample size
+gp_fit$acceptance
+effectiveSize(as.mcmc(gp_fit$p.theta.recover.samples))
+```
