@@ -1,11 +1,25 @@
 ---
-title: "GC1"
+title: "Group 1 GC 1-2"
 author: 
 - "Yizhou Gu"
 - "Matthew McAnear"
 - "Sam Rosenberg"
 - "Victor Verma"
-format: beamer
+format:
+    beamer:
+        linkcolor: blue
+        link-citations: true
+        citation-color: purple
+bibliography: references.bib
+execute:
+    echo: FALSE
+    fig-margin: TRUE 
+---
+format:
+    beamer:
+        linkcolor: blue
+        link-citations: true
+        citation-color: purple
 bibliography: references.bib
 execute:
     echo: FALSE
@@ -25,15 +39,42 @@ library(conflicted)
 library(scico)
 library(sf)
 library(rnaturalearth)
+library(rnaturalearthdata)
+library(geoR)
 library(geoR)
 library(spBayes)
 library(coda)
 conflicts_prefer(dplyr::filter, dplyr::lag)
 
+full_data <- read_xlsx(
+    here("data/raw/USFWS_Bat_Acoustic_Data/NightlyPassCounts.xlsx")
+)
+full_metadata <- read.csv(here("data/raw/Bat_Detector_Metadata/acoustic_sites.csv"))
+
+load(here("data/processed/data_metadata.RData"))
+
 theme_set(theme_bw())
 
 set.seed(1)
 ```
+
+# Introduction
+
+- Our goal is to investigate the ranges of bat populations located along the shores of the Great Lakes. Specifically, we are interested in the following research questions:
+    - Which species have the largest ranges
+    - How population density varies with distance to the shore
+    - How stable different species' ranges have been, i.e., how much their ranges have changed over time
+- We downloaded a point-referenced dataset called the [USFWS Great Lakes and Upper Midwest Acoustic Bat Dataset](https://catalog.data.gov/dataset/usfws-great-lakes-and-upper-midwest-acoustic-bat-dataset) [@usfws_bat_acoustic_data].
+    - The downloaded dataset contains one row for each pair of a site and a night on which data was recorded at that site. For each of several species, there are columns giving the number of detected bats belonging to the species.
+    
+# Downloaded Dataset Structure
+
+Some of the columns in the first few rows of the downloaded dataset are shown below. In total, there are `r nrow(full_data)` observations from `r nrow(full_metadata)` sites.
+```{r}
+full_data %>% select(AcousticSite, NightOf, EPTFUS, LASBOR) %>% head()
+```
+
+# Downloaded Dataset Structure
 
 ```{r}
 species_counts <- read_xlsx(
@@ -61,95 +102,185 @@ bat_species_lookup <- list(
 )
 ```
 
+- We have data on `r length(bat_species_lookup) - 1` species. Some examples are the `r bat_species_lookup[1]` (referred to as `r names(bat_species_lookup)[1]` in the data), `r bat_species_lookup[2]` (`r names(bat_species_lookup)[2]`), and `r bat_species_lookup[3]` (`r names(bat_species_lookup)[3]`).
+- Hence, the dataset we downloaded contains `r nrow(full_data)` observations, each of which contains a site, a date, and counts of detections for `r length(bat_species_lookup) - 1` different species.
 
-# EDA
+# Sites
 
-Get the sum of counts for each species by and site.
-
-```{r}
-sum_counts_by_year <- species_counts %>%
-    group_by(site = AcousticSite) %>%
-    summarize(across(all_of(names(bat_species_lookup)), ~ sum(.x, na.rm = TRUE)))
-
-utils::head(sum_counts_by_year)
-```
-
-Now, we merge in the site metadata. This contains the site name, location (lat/lon), the number of detector nights
-by year, and which bat species the detector is set up to detect.
+<!-- This slide is based on data/process_raw_data_metadata.qmd -->
 
 ```{r}
-utils::head(sites)
-```
+#| output: FALSE
 
-Let's collapse all detector nights to be a single value across all years.
-```{r}
-sites$detectorNights <- rowSums(sites[, startsWith(colnames(sites), "X")])
-select_cols <- c(
-    "AcousticSite", "detectorNights", "Long", "Lat",
-    names(bat_species_lookup)[1:length(bat_species_lookup) - 1] # exclude "ALL"
-)
-sites_subset <- sites[, select_cols]
-```
+# The following objects contain information on state, province, and lake boundaries and will be used when making maps.
 
-
-```{r}
-bat_count_cols <- c(
-    sprintf("%s.counts", names(bat_species_lookup)[1:length(bat_species_lookup) - 1]),
-    "ALL"
-)
-output_df <- sum_counts_by_year %>%
-    left_join(
-        sites_subset,
-        by = join_by(x$site == y$AcousticSite),
-        suffix = c(".counts", ".site")
-    ) %>% mutate(
-        mean_count = across(all_of(bat_count_cols), ~ .x / detectorNights)
+usa <- ne_states(country = "United States of America", returnclass = "sf")
+ontario <- ne_states(country = "Canada", returnclass = "sf") %>%
+    filter(name == "Ontario")
+great_lakes <- ne_download(
+    scale = 50, type = "lakes", category = "physical", returnclass = "sf"
+) %>%
+    filter(
+        name %in% c(
+            "Lake Superior", "Lake Michigan", "Lake Huron", "Lake Erie",
+            "Lake Ontario"
+        )
     )
+```
+    
+The map below reveals that a number of sites are far away from the Great Lakes. Those sites are in southern Minnesota, northern Iowa, central Indiana, southern Pennsylvania, and Texas.
+```{r}
+ggplot() +
+    geom_sf(data = usa, color = "black", fill = "white") +
+    geom_sf(data = ontario, color = "black", fill = "white") +
+    geom_sf(data = great_lakes, color = "lightblue", fill = "lightblue") +
+    geom_point(aes(Long, Lat), full_metadata, color = "red") +
+    coord_sf(xlim = c(-123, -69), ylim = c(25, 50)) +
+    labs(x = "Longitude", y = "Latitude", title = "Site Locations") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+```
 
-# mutate(output_df, mean_count = across(all_of(bat_count_cols), ~ .x / detectorNights))
-# colnames(output_df)
-write.csv(
-    output_df,
-    file = "../data/bat_counts_and_sites.csv",
-    row.names = FALSE
+# Sites
+
+<!-- This slide is based on data/process_raw_data_metadata.qmd -->
+
+We eliminated data from sites far away from the Great Lakes. We are left with `r nrow(data)` observations from `r nrow(metadata)` sites.
+
+```{r}
+ggplot() +
+    geom_sf(data = usa, color = "black", fill = "white") +
+    geom_sf(data = ontario, color = "black", fill = "white") +
+    geom_sf(data = great_lakes, color = "lightblue", fill = "lightblue") +
+    geom_point(aes(Long, Lat), metadata, color = "red") +
+    coord_sf(xlim = c(-123, -69), ylim = c(25, 50)) +
+    labs(x = "Longitude", y = "Latitude", title = "Site Locations") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+```
+
+# Missingness
+
+<!-- This slide is based on gc1/victor_eda.qmd -->
+
+- There are no *explicit* missing values. However, there are quite a few *implicit* missing values, as the sensors are only active for certain nights of the year.
+- Also, we're interested in bats generally, but the sensors are only equipped to detect certain species of bats.
+- The line plot on the next slide shows how many sites have data by night.
+    - There are stretches of time where no sites were producing data; they start toward the end of one year and end early the next year.
+    - There are strange dips that occur in the middle of the year.
+    - Many more sites produced data in the early 2010s than later in the decade.
+
+# Missingness
+
+<!-- This slide is based on gc1/victor_eda.qmd -->
+
+```{r}
+site_counts_by_night <- data %>%
+    group_by(NightOf) %>%
+    summarize(num_sites = length(AcousticSite))
+site_counts_by_night <- complete(
+    site_counts_by_night,
+    NightOf = full_seq(NightOf, period = 86400),
+    fill = list(num_sites = 0)
 )
+site_counts_by_night %>%
+    ggplot(aes(NightOf, num_sites)) +
+    geom_line() +
+    labs(x = "Night", y = "Number of Sites with Data")
+```
+
+# Data Aggregation
+
+<!-- This slide is based on gc1/victor_eda.qmd -->
+
+```{r}
+count_cols <- setdiff(names(data), c("AcousticSite", "NightOf"))
+zero_count_cols <- data %>%
+    summarize(across(all_of(count_cols), ~ any(.x > 0))) %>%
+    discard(isTRUE) %>%
+    names()
+count_cols <- setdiff(count_cols, zero_count_cols)
+non_ALL_count_cols <- setdiff(count_cols, "ALL")
+```
+
+We aggregated the data by site. For each site, we computed the number of nights with data, and for each species, we computed the number of detections per night. A portion of the aggregated dataset is shown below.
+```{r}
+#| message: FALSE
+
+data_rollup <- data %>%
+    group_by(AcousticSite) %>%
+    summarize(
+        num_nights = length(NightOf), across(all_of(count_cols) & !ALL, sum)
+    ) %>%
+    rowwise(AcousticSite, num_nights) %>%
+    summarize(across(all_of(non_ALL_count_cols), ~ .x / num_nights)) %>%
+    ungroup() %>%
+    inner_join(
+        select(metadata, AcousticSite, Long, Lat), by = "AcousticSite"
+    ) %>%
+    relocate(Long, Lat, .after = AcousticSite)
+data_rollup %>% select(AcousticSite, num_nights, EPTFUS, LASBOR) %>% head()
+```
+
+# Spatial Aspects of the Data
+
+- The spatial domain of the data consists of the shores of the Great Lakes region.
+- The dimension of the spatial domain is two, with the spatial locations of observations being indexed by latitude and longitude.
+- It seems reasonable to model covariance as decaying with distance, as sites near each other should be in the ranges of roughly the same bat populations, so their detection figures should be roughly the same. In contrast, sites far away from each other should be in the ranges of different bat populations and should thus have dissimilar detection figures.
+
+# Spatial Aspects of the Data
+
+- We imagine that spatial dependence will play a role between the variables in the dataset because there should be a large spatial dependence in the counts of bats for nearby detectors. We expect that because certain species each have limited ranges that are spatially determined by habitat factors, then the individual sensors are likely to pick up only certain bats, and therefore nearby sensors should see similar counts of bats.
+
+# Histograms
+
+On the next slide are histograms that show the distributions of the detections/night variables for the various species. Each variable is right-skewed; for most sites, the ratios are close to zero, and for a few, the ratios are large.
+
+# Histograms
+
+```{r}
+#| message: FALSE
+
+data_rollup %>%
+    select(non_ALL_count_cols) %>%
+    pivot_longer(everything(), names_to = "var", values_to = "val") %>%
+    ggplot(aes(val)) +
+    facet_wrap(vars(var), scales = "free") +
+    labs(x = "Variable", y = "Count") +
+    geom_histogram()
 ```
 
 
-# GC 1 Tasks
-## Data Description
+# Correlations
 
-* **Source of the data. Link, citation.**  
-  * US Fish and Wildlife Service Acoustic Bat dataset [@usfws_bat_acoustic_data].
-  * Data has been aggregated to be the sum of bat counts by species and year at each monitoring site.
+```{r}
+cor_tbl <- data_rollup %>%
+    select(non_ALL_count_cols) %>%
+    cor() %>%
+    as_tibble(rownames = "var1") %>%
+    pivot_longer(!var1, names_to = "var2", values_to = "cor")
+max_cor <- cor_tbl %>%
+    filter(var1 != var2) %>%
+    slice_max(cor, n = 1) %>%
+    slice(1)
+```
 
-* **Overall data description (number of observations, number of variables)**
-  * The cleaned data has 18,869 observations of 17 variables.
+On the next slide is a correlogram that shows the correlations between the detections/night variables for the various species. The only strong correlation between different species is between `r max_cor$var1` (`r bat_species_lookup[[max_cor$var1]]`) and `r max_cor$var2` (`r bat_species_lookup[[max_cor$var2]]`); it equals `r signif(max_cor$cor, 2)`.
 
-* **Are there missing data? Is there a pattern or an intuitive reason for the missingness?**
-  * There is quite a bit of missing data - the sensors are only equipped to detect certain species of bats, and the sensors are only active for certain nights of the year.
-  * The number of nights is included, so we could normalize the data to be the mean number of bats of each species detected per night.
+# Correlations
 
----
+```{r}
+cor_tbl %>%
+    ggplot(aes(var1, var2, fill = cor)) +
+    labs(x = "Variable 1", y = "Variable 2", fill = "Correlation") +
+    geom_tile() +
+    theme(axis.text.x = element_text(vjust = 0.5, angle = 30), legend.position = "top")
+```
 
-## Descriptive Statistics
-* **What is in the dataset? Describe each column. Summary statistics. Correlation analysis (non-spatial is ok). Preliminary data analysis using methods that you know**
 
-* **Make summary figures based on non-spatial descriptive statistics**
+# Empirical Covariograms
 
----
-
-## Spatial Data
-
-* **Describe the spatial component of the data: what is the spatial domain, its dimension, how are observations indexed in space? Do you think modeling covariance as decaying with distance is appropriate?**    
-  * The Great Lakes region is the spatial domain.
-  * Dimensions are $\mathcal{D}^2$, and observations are indexed by latitude and longitude.
-
----
-
-## Empirical Covariogram
-* **Visualize the empirical covariogram for the variable of interest. Does the variogram suggest spatial dependence in the data?**
-  * The covariograms suggest wildly differing spatial dependences across bat species when ignoring temporal variation, including both positive and negative spatial dependence.  
+The covariograms computed from the aggregated data suggest wildly differing spatial dependences across bat species when ignoring temporal variation, including both positive and negative spatial dependence.  
   
 ```{r}
 #| message: FALSE
@@ -187,19 +318,16 @@ for(sp in species){
 }
 ggplot(sv_data, aes(x=dists, y=variogram)) + 
     geom_point(size=2, shape=8) +
+    geom_line() +
     facet_wrap(~ species, nrow = 2, scales = "free") +
     theme_minimal() + 
     xlab("Distances") +
     ylab("Variogram")
 ```
 
----
+# Spatial Visualizations
 
-## Spatial Visualization
-
-* **Map the data. Map the spatial variables, and write short but meaningful captions for your figures.**
-  * It is difficult to discern any patterns in the spatial variation of the mean number of sightings per night by species. The lack of a clear spatial pattern continues even when we filter out seeming outliers in the number of mean number of mean sightings per night.  
-
+It is difficult to discern any patterns in the spatial variation of the mean number of sightings per night by species. The lack of a clear spatial pattern continues even when we filter out seeming outliers in the number of mean number of mean sightings per night.
 ```{r}
 #| fig-margin: TRUE
 vis_metadata2 <- vis_metadata |> 
@@ -229,13 +357,9 @@ sightings_df |>
     ggtitle("Mean Sightings Per Night at Each Station by Species")
 ```
 
----
+# Spatial Visualizations
 
-## Spatial Visualization
-
-* **Map the data. Map the spatial variables, and write short but meaningful captions for your figures.**
-  * The lack of a clear spatial pattern continues even when we filter out seeming outliers in the number of mean number of mean sightings per night.  
-
+The lack of a clear spatial pattern continues even when we filter out seeming outliers in the number of mean number of mean sightings per night.  
 ```{r}
 #| fig-margin: TRUE
 sightings_df |>
@@ -250,42 +374,31 @@ sightings_df |>
     ggtitle("Mean Sightings Per Night at Each Station by Species", subtitle = "(Sightings/night >100 removed)")
 ```
 
+# A Potential DAG
+
+Below is a potential DAG for our problem.
+![](dag.jpg)
 ---
 
-## Spatial Dependence
-* **How do you imagine spatial dependence may play a role between the variables in the dataset?**
-  * There will be a large spatial dependence in the count of bats for nearby detectors. We expect that because certain species each have limited ranges that are spatially determined by habitat factors, then the individual sensors are likely to pick up only certain bats, and therefore nearby sensors should see similar counts of bats.
+# A Potential DAG
 
----
+In the DAG, $\text{MVN}(0, \Sigma)$ represents a multivariate Gaussian random vector consisting of detections per night for various sites. We assume a mean zero Gaussian process, where the covariance is modeled using a kernel function (e.g., a Matern kernel) and all hyperparameters are independent. The covariance matrix $\Sigma$ is based on a kernel represented by $\kappa$; $\ell$ and $\sigma$ represent the length and variance scales, respectively.
 
-## Possible Research Questions
-* **What are some research questions that these data could help answer (at least one for each dataset)?**
-    * Which bat species have the largest or most stable ranges in the Great Lakes?
-    * How have these counts for bats changed over time? We have a spatiotemporal dataset and can be much more granular if needed.
-    * Many of the monitoring stations are closer to the lakeshore - can we estimate the inland distribution of bats?
+For our DAG, we only have observations of spatial variables and currently have no additional covariates. 
 
----
 
-## A Potential DAG
-* **Write an intuitive directed acyclic graphical model outlining the important variables, the parameters, and how they could be related to each other (no need for other assumptions – keep it simple)**
+# Anticipated Results, Potential Problems, and Additional Data
 
----
+- We anticipate that bat populations will drop off as one moves inland, as bats require bodies of water such as rivers in their habitats. Likewise, we anticipate that spatially adjacent sites will have similar populations of bats.
+- Our model is limited in that most data is collected along the Great Lakes shores, so extrapolation may be difficult.
+- Additional inland bat population observations could be helpful, as well as covariates related to distance from the nearest water way and wind farm.
 
-## Anticipated Results, Potential Problems, and Additional Data
-* **What are the potential results that you may anticipate?**
-
-* **What are some potential pitfalls or shortcomings of your model?**
-
-* **What additional data could be useful for the purpose of your analysis?**
-
----
-
-# GC 2 Tasks
+<!--GC 2 tasks-->
 ```{r}
 data <- read_csv(here("data/processed/annual_bat_counts.csv"))
 ```
 
-## Preparation of the Data for Model-Building
+# Preparation of the Data for Model-Building
 
 There's one record for each pair of `AcousticSite` and `Year`.
 ```{r}
@@ -338,8 +451,8 @@ data_for_mods <- data %>%
     add_column(num_detectable_species)
 ```
 
-## Linear Models
-### Non-Spatial Linear Model
+# Linear Models
+## Non-Spatial Linear Model
 To begin with, we fit a simple linear model of counts across all species. Under the model, at any location $s$, 
 $$
 \log(1 + Y(s)) \sim N(\beta_0 + X(s)^{\top} 
@@ -376,7 +489,7 @@ ggplot(lm_nonspatial_sv_df, aes(x=dists, y=variogram)) +
     ylab("Variogram")
 ```
 
-### Linear Model with Spatial Covariance
+## Linear Model with Spatial Covariance
 Noting that the spatial dependence that was not aptly captured by the simple linear model, we instead consider a spatial Gaussian process model. Under the model, at any location $s$,
 $$
 \log(1 + Y(s)) \sim GP(\beta_0 + X(s)^{\top} 
