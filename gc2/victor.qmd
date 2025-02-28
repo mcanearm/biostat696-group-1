@@ -3,6 +3,8 @@ title: "Victor's Analysis"
 format:
     html:
         embed-resources: true
+        toc: true
+        number-sections: true
 ---
 
 ```{r}
@@ -13,6 +15,7 @@ here::i_am("gc2/victor.qmd")
 
 library(conflicted)
 library(here)
+library(spBayes)
 library(tidyverse)
 conflicts_prefer(dplyr::filter, dplyr::lag)
 
@@ -20,6 +23,8 @@ data <- read_csv(here("data/processed/annual_bat_counts.csv"))
 
 theme_set(theme_bw())
 ```
+
+# Preparation of the Data for Model-Building
 
 There's one record for each pair of `AcousticSite` and `Year`.
 ```{r}
@@ -72,54 +77,73 @@ data_for_mods <- data %>%
     add_column(num_detectable_species)
 ```
 
+# Models without Spatial Random Effects
+
+We first fit a Poisson regression model without overdispersion or underdispersion. Under the model, at any location $s$,
+$$
+Y(s) \sim \text{Poisson}(\exp\{\beta_0 + X(s)^{\top}\beta\}),
+$$ {#eq-nonspatial-poisson}
+where $X(s)$ is the vector whose components are the distance from $s$ to the shore, the number of operational nights, and the number of detectable species.
 ```{r}
 mod1 <- glm(
     ALL ~ dist_to_water + num_nights + num_detectable_species,
     poisson,
     data_for_mods
 )
+mod1_fitted_vals_resids <- tibble(
+    fitted_val = fitted(mod1), resid = resid(mod1)
+)
+```
+
+Below is a summary of the fitted model.
+```{r}
 summary(mod1)
 ```
 
+Under the model in @eq-nonspatial-poisson, $\mathbb{E}(Y(s)) = \text{Var}(Y(s))$, or $\sqrt{\mathbb{E}(Y(s))} = \text{SD}(Y(s))$. We use the residuals to check whether this property of the model is reasonable. For the $i$th observation, which was recorded at location $s_i$, we compare $\sqrt{\widehat{\mathbb{E}}(Y(s_i))}$ to the absolute residual $|Y(s_i) - \widehat{Y}(s_i)|$; if the property is reasonable, then these two quantities should be similar. Below, we plot the absolute residual versus the square root of the fitted value. The two are equal along the dashed line. The plot is ambiguous. For some observations, the absolute residual is much larger than expected, which suggests overdispersion. However, absolute residuals that aren't close to the line seem to be below it more often than above it, which suggests underdispersion.
 ```{r}
-tibble(fitted_val = fitted(mod1), squared_resid = resid(mod1)^2) %>%
-    ggplot(aes(fitted_val, squared_resid)) +
-    geom_point(alpha = 0.3) +
-    geom_abline(linetype = "dashed", slope = 1, intercept = 0) +
-    labs(x = "Fitted Value", y = "Squared Residual") +
-    theme_bw()
-```
-
-```{r}
-tibble(sqrt_fitted_val = sqrt(fitted(mod1)), abs_resid = abs(resid(mod1))) %>%
-    ggplot(aes(sqrt_fitted_val, abs_resid)) +
+mod1_fitted_vals_resids %>%
+    ggplot(aes(sqrt(fitted_val), abs(resid))) +
     geom_point(alpha = 0.3) +
     geom_abline(linetype = "dashed", slope = 1, intercept = 0) +
     labs(x = expression(sqrt("Fitted Value")), y = "Absolute Residual") +
     theme_bw()
 ```
 
+Below is a histogram of the ratios of the absolute residual to the square root of the fitted value; the dashed line is at one. The histogram reiterates the messages of the scatterplot above.
+```{r}
+mod1_fitted_vals_resids %>%
+    mutate(ratio = abs(resid) / sqrt(fitted_val)) %>%
+    ggplot(aes(ratio)) +
+    geom_histogram(bins = 100, color = "black", fill = "white") +
+    geom_vline(linetype = "dashed", xintercept = 1) +
+    labs(
+        x = expression("Absolute Residual" / sqrt("Fitted Value")),
+        y = "Number of Observations"
+    )
+```
+
+We next try a Quasi-Poisson regression model, i.e., one for which the dispersion parameter is estimated instead of being fixed at one.
 ```{r}
 mod2 <- glm(
     ALL ~ dist_to_water + num_nights + num_detectable_species,
     quasipoisson,
     data_for_mods
 )
+mod2_fitted_vals_resids <- tibble(
+    fitted_val = fitted(mod2), resid = resid(mod2)
+)
+```
+
+Below is a summary of the fitted model. Note that the estimated dispersion parameter is large, so the fitted model is similar to the first fitted model.
+```{r}
 summary(mod2)
 ```
 
+Since the dispersion parameter estimate is large, the scatterplot of the absolute residual versus the square root of the fitted value looks almost exactly like the first scatterplot.
 ```{r}
-tibble(fitted_val = fitted(mod2), squared_resid = resid(mod2)^2) %>%
-    ggplot(aes(fitted_val, squared_resid)) +
-    geom_point(alpha = 0.3) +
-    geom_abline(linetype = "dashed", slope = 1, intercept = 0) +
-    labs(x = "Fitted Value", y = "Squared Residual") +
-    theme_bw()
-```
-
-```{r}
-tibble(sqrt_fitted_val = sqrt(fitted(mod2)), abs_resid = abs(resid(mod2))) %>%
-    ggplot(aes(sqrt_fitted_val, abs_resid)) +
+mod2_fitted_vals_resids %>%
+    ggplot(aes(sqrt(fitted_val), abs(resid))) +
     geom_point(alpha = 0.3) +
     geom_abline(linetype = "dashed", slope = 1, intercept = 0) +
     labs(x = expression(sqrt("Fitted Value")), y = "Absolute Residual") +
