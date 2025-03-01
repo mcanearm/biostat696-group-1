@@ -15,17 +15,6 @@ execute:
     echo: FALSE
     fig-margin: TRUE 
 ---
-format:
-    beamer:
-        linkcolor: blue
-        link-citations: true
-        citation-color: purple
-bibliography: references.bib
-execute:
-    echo: FALSE
-    fig-margin: TRUE 
----
-
 
 ```{r Data Input, warning=TRUE, message=FALSE}
 
@@ -57,6 +46,10 @@ theme_set(theme_bw())
 
 set.seed(1)
 ```
+
+# GC1 {.center}
+
+GC1
 
 # Introduction
 
@@ -398,34 +391,41 @@ For our DAG, we only have observations of spatial variables and currently have n
 data <- read_csv(here("data/processed/annual_bat_counts.csv"))
 ```
 
+# GC2 {.center}
+
+GC2
+
 # Preparation of the Data for Model-Building
 
-There's one record for each pair of `AcousticSite` and `Year`.
-```{r}
-data %>% count(AcousticSite, Year) %>% filter(n > 1)
-```
+We decided to use data from all of the sites instead of just the data from the sites along the Great Lakes. Below is a map that shows all of the sites.
+![](map.png)
+---
 
-Most sites only have data for a single year.
+# Preparation of the Data for Model-Building
+
+The map below shows all of the non-Texas stations.
+![](non_tx_map.png)
+---
+
+# Preparation of the Data for Model-Building
+
+There's one record for each pair of `AcousticSite` and `Year`. Most sites only have data for a single year.
 ```{r}
 data %>%
     count(AcousticSite, name = "num_years") %>%
     count(num_years, name = "num_sites")
 ```
 
-Below is another summary that shows that most sites only have data for one year.
-```{r}
-data %>%
-    group_by(AcousticSite) %>%
-    summarize(years = str_c(Year, collapse = ",")) %>%
-    count(years, sort = TRUE, name = "num_sites")
-```
+# Preparation of the Data for Model-Building
 
 More sites have data for `r count(data, Year, sort = TRUE)$Year[1]` than for any other year.
 ```{r}
 count(data, Year, sort = TRUE, name = "num_sites")
 ```
 
-For each site-year pair, we count the number of species that could be detected at the site in the year.
+# Preparation of the Data for Model-Building
+
+<!-- For each site-year pair, we count the number of species that could be detected at the site in the year. -->
 ```{r}
 num_detectable_species <- data %>%
     select(ends_with("_meta")) %>%
@@ -451,8 +451,8 @@ data_for_mods <- data %>%
     add_column(num_detectable_species)
 ```
 
-# Linear Models
-## Non-Spatial Linear Model
+# Non-Spatial Linear Model
+
 To begin with, we fit a simple linear model of counts across all species. Under the model, at any location $s$, 
 $$
 \log(1 + Y(s)) \sim N(\beta_0 + X(s)^{\top} 
@@ -470,9 +470,15 @@ data_for_mods$resid <- lm_nonspatial$residuals
 print(paste0("Residual variance: ", var(data_for_mods$resid)))
 ```
 
+# Non-Spatial Linear Model
+
 The residuals show strong spatial correlation (with longitude and latitude as spatial coordinates), as demonstrated in the empirical semivariogram.
 
+# Non-Spatial Linear Model
+
 ```{r}
+#| cache: true
+
 lm_nonspatial_sv <- data_for_mods %>% with(geoR::variog(
     data = resid, coords = cbind(Long, Lat), 
     uvec = 10, messages=FALSE
@@ -489,7 +495,8 @@ ggplot(lm_nonspatial_sv_df, aes(x=dists, y=variogram)) +
     ylab("Variogram")
 ```
 
-## Linear Model with Spatial Covariance
+# Linear Model with Spatial Covariance
+
 Noting that the spatial dependence that was not aptly captured by the simple linear model, we instead consider a spatial Gaussian process model. Under the model, at any location $s$,
 $$
 \log(1 + Y(s)) \sim GP(\beta_0 + X(s)^{\top} 
@@ -503,9 +510,13 @@ C_{\sigma^2, \phi}(s,s') = \sigma^2 \exp\{-\phi ||s - s'||_2\},
 $$
 where $\sigma^2$ and $\phi$ are parameters to be fitted.
 
+# Linear Model with Spatial Covariance
+
 Note that the spBayes package runs into computational issues with fitting when observations have spatial replicates, so we pre-process the data by jittering and adding slight noise on the order of $10^{-6}$ degrees (about $0.11$ m).
 
 ```{r}
+#| cache: TRUE
+
 # Pseudo-deduplicate data
 data_for_mods_pseudo_dedup <- data_for_mods |> mutate(
     Long_jitter = jitter(Long, amount = 1e-6),
@@ -534,10 +545,13 @@ lm_spatial <- spLM(
 lm_spatial_fit <- lm_spatial %>% spRecover(start=round(n.samples/3), verbose=FALSE)
 ```
 
+# Linear Model with Spatial Covariance
+
 With the model fit, we check diagnostics for Markov chain Monte Carlo (MCMC) convergence.
 
 To begin, we check the trace plots for convergence. We see that $\beta$, $\sigma^2$, and $\tau^2$ reach reasonable convergence, but $\phi$ has trouble converging. This remains true even when tweaking the prior parameters, starting values, and step sizes.
 
+# Linear Model with Spatial Covariance
 
 ```{r}
 # Check trace plots
@@ -548,12 +562,18 @@ ts.plot(lm_spatial_fit$p.theta.recover.samples[,2], main = "tau^2", ylab = "")
 ts.plot(lm_spatial_fit$p.theta.recover.samples[,3], main = "phi", ylab = "")
 ```
 
+# Linear Model with Spatial Covariance
+
 Likewise, looking at the autocorrelation function plots, we see that there is reasonably strong autocorrelation between $\phi$ posterior samples, even at lags of 20-30, indicating further issues with the MCMC fitting. 
+
+# Linear Model with Spatial Covariance
 
 ```{r}
 # Check ACF plots 
 autocorr.plot(as.mcmc(lm_spatial_fit$p.theta.recover.samples))
 ```
+
+# Linear Model with Spatial Covariance
 
 Looking further, we see we have acceptance rates of about 20\% and effective sample sizes of 100+ observations.
 
@@ -562,6 +582,8 @@ Looking further, we see we have acceptance rates of about 20\% and effective sam
 print(lm_spatial_fit$acceptance)
 print(effectiveSize(as.mcmc(lm_spatial_fit$p.theta.recover.samples)))
 ```
+
+# Linear Model with Spatial Covariance
 
 Given the poor convergence of the $\phi$ parameter, we are inclined to explore other models beyond the linear model, possibly such as Poisson regression models which are better suited for count data.
 
