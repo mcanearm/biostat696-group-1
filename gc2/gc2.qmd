@@ -30,7 +30,6 @@ library(sf)
 library(rnaturalearth)
 library(rnaturalearthdata)
 library(geoR)
-library(geoR)
 library(spBayes)
 library(coda)
 conflicts_prefer(dplyr::filter, dplyr::lag)
@@ -397,6 +396,7 @@ GC2
 
 # Preparation of the Data for Model-Building
 
+
 We decided to use data from all of the sites instead of just the data from the sites along the Great Lakes. Below is a map that shows all of the sites.
 ![](map.png)
 ---
@@ -466,8 +466,8 @@ The residual variance from the nonspatial linear model is ~2.4, which correspond
 lm_nonspatial <- lm(
   log1p(ALL) ~ dist_to_water + num_nights + num_detectable_species, data = data_for_mods
 )
-data_for_mods$resid <- lm_nonspatial$residuals
-print(paste0("Residual variance: ", var(data_for_mods$resid)))
+data_for_mods$resid2 <- lm_nonspatial$residuals
+print(paste0("Residual variance: ", var(data_for_mods$resid2)))
 ```
 
 # Non-Spatial Linear Model
@@ -586,5 +586,251 @@ print(effectiveSize(as.mcmc(lm_spatial_fit$p.theta.recover.samples)))
 # Linear Model with Spatial Covariance
 
 Given the poor convergence of the $\phi$ parameter, we are inclined to explore other models beyond the linear model, possibly such as Poisson regression models which are better suited for count data.
+
+# A Poisson Regression Model without Spatial Random Effects
+
+We first fit a Poisson regression model without overdispersion or underdispersion. Under the model, at any location $s$,
+$$
+    Y(s) \sim \text{Poisson}(\exp\{\beta_0 + X(s)^{\top}\beta\}),
+$$ {#eq-nonspatial-poisson}
+where $X(s)$ is the vector whose components are the distance from $s$ to the shore, the number of operational nights, and the number of detectable species.
+```{r}
+mod1 <- glm(
+    ALL ~ dist_to_water + num_nights + num_detectable_species,
+    poisson,
+    data_for_mods
+)
+mod1_fitted_vals_resids <- tibble(
+    fitted_val = fitted(mod1), resid = resid(mod1)
+)
+```
+
+# A Poisson Regression Model without Spatial Random Effects
+
+Below is a summary of the fitted model.
+
+# A Poisson Regression Model without Spatial Random Effects
+
+```{r}
+summary(mod1)$call
+summary(mod1)$coefficients
+```
+
+# A Poisson Regression Model without Spatial Random Effects
+
+Under the model in @eq-nonspatial-poisson, $\mathbb{E}(Y(s)) = \text{Var}(Y(s))$, or $\sqrt{\mathbb{E}(Y(s))} = \text{SD}(Y(s))$. We use the residuals to check whether this property of the model is reasonable. For the $i$th observation, which was recorded at location $s_i$, we compare $\sqrt{\widehat{\mathbb{E}}(Y(s_i))}$ to the absolute residual $|Y(s_i) - \widehat{Y}(s_i)|$; if the property is reasonable, then these two quantities should be similar. Below, we plot the absolute residual versus the square root of the fitted value. The two are equal along the dashed line. For some observations, the absolute residual is much larger than expected. However, this isn't true systematically, so those observations may just be outliers. The absolute residuals that aren't close to the line seem to be below it more often than above it, which suggests underdispersion.
+
+# A Poisson Regression Model without Spatial Random Effects
+
+```{r}
+mod1_fitted_vals_resids %>%
+    ggplot(aes(sqrt(fitted_val), abs(resid))) +
+    geom_point(alpha = 0.3) +
+    geom_abline(linetype = "dashed", slope = 1, intercept = 0) +
+    labs(x = expression(sqrt("Fitted Value")), y = "Absolute Residual") +
+    theme_bw()
+```
+
+# A Poisson Regression Model without Spatial Random Effects
+
+Below is a histogram of the ratios of the absolute residual to the square root of the fitted value; the dashed line is at one. The histogram reiterates the messages of the scatterplot above.
+
+# A Poisson Regression Model without Spatial Random Effects
+
+```{r}
+mod1_fitted_vals_resids %>%
+    mutate(ratio = abs(resid) / sqrt(fitted_val)) %>%
+    ggplot(aes(ratio)) +
+    geom_histogram(bins = 100, color = "black", fill = "white") +
+    geom_vline(linetype = "dashed", xintercept = 1) +
+    labs(
+        x = expression("Absolute Residual" / sqrt("Fitted Value")),
+        y = "Number of Observations"
+    )
+```
+
+# A Poisson Regression Model without Spatial Random Effects
+
+<!-- Below is a function for computing the Pearson dispersion statistic. -->
+```{r}
+calc_pearson_disperse_stat <- function(mod) {
+    sum(resid(mod)^2 / fitted(mod)) / df.residual(mod)
+}
+```
+
+The Pearson dispersion statistic for the model in @eq-nonspatial-poisson is below.
+```{r}
+calc_pearson_disperse_stat(mod1)
+```
+
+# A Poisson Regression Model without Spatial Random Effects
+
+To continue assessing the fit of the model, we generate 100 samples of counts under the model. We will compare how the counts in these samples are distributed to how the real counts are distributed.
+```{r}
+samples <- replicate(
+    100,
+    rpois(nrow(data_for_mods), mod1_fitted_vals_resids$fitted_val)
+) %>%
+    `colnames<-`(str_c("sample", 1:100)) %>%
+    as_tibble() %>%
+    pivot_longer(
+        everything(),
+        names_to = "sample", names_prefix = "sample",
+        values_to = "ALL"
+    ) %>%
+    bind_rows(tibble(sample = "0", ALL = data_for_mods$ALL), .)
+```
+
+# A Poisson Regression Model without Spatial Random Effects
+
+In the plot below, there is one density estimate for each sample (the gray curves) as well as a density estimate for the real data (the blue curve). The tails look fairly similar, but the blue curve's peak is to the left of the gray curves' peaks. This suggests that the count under the model in @eq-nonspatial-poisson tends to be somewhat larger than it should be.
+
+# A Poisson Regression Model without Spatial Random Effects
+
+```{r}
+samples %>%
+    mutate(is_real_data = sample == "0") %>%
+    ggplot(aes(ALL, group = sample, color = is_real_data)) +
+    scale_color_manual(
+        labels = c(`TRUE` = "Real", `FALSE` = "Simulated"),
+        values = c(`TRUE` = "blue", `FALSE` = "gray")
+    ) +
+    geom_density() +
+    labs(x = "Response", y = "Density", color = "Data Type")
+```
+
+# A Poisson Regression Model without Spatial Random Effects
+
+We next compute the empirical semivariogram of the residuals from the model in @eq-nonspatial-poisson. Since there are replicates for some sites, we need to jitter the coordinates to make things work. We use 100 bins to compute the empirical semivariogram.
+```{r}
+#| output: FALSE
+
+mod1_variogram <- bind_cols(data_for_mods, mod1_fitted_vals_resids) %>%
+    select("Long", "Lat", "resid") %>%
+    as.geodata() %>%
+    jitterDupCoords(max = 1e-4) %>%
+    variog(uvec = 100, messages = FALSE)
+```
+
+# A Poisson Regression Model without Spatial Random Effects
+
+The empirical semivariogram suggests spatial dependence only over small distances. We can try fitting a Poisson regression model with spatial random effects.
+
+# A Poisson Regression Model without Spatial Random Effects
+
+```{r}
+mod1_variogram %>%
+    plot(
+        type = "o",
+        main = "Empirical Semivariogram of Residuals",
+        xlab = "Distance", ylab = "Semivariance"
+    )
+```
+
+# A Quasi-Poisson Regression Model without Spatial Random Effects
+
+We next try a Quasi-Poisson regression model, i.e., one for which the dispersion parameter is estimated instead of being fixed at one.
+```{r}
+mod2 <- glm(
+    ALL ~ dist_to_water + num_nights + num_detectable_species,
+    quasipoisson,
+    data_for_mods
+)
+mod2_fitted_vals_resids <- tibble(
+    fitted_val = fitted(mod2), resid = resid(mod2)
+)
+```
+
+# A Quasi-Poisson Regression Model without Spatial Random Effects
+
+Below is a summary of the fitted model. Note that the estimated dispersion parameter is large, so the fitted model is similar to the first fitted model.
+
+# A Quasi-Poisson Regression Model without Spatial Random Effects
+
+```{r}
+summary(mod2)$call
+summary(mod2)$coefficients
+str_glue("dispersion: {summary(mod2)$dispersion}")
+```
+
+# A Quasi-Poisson Regression Model without Spatial Random Effects
+
+Since the dispersion parameter estimate is large, the scatterplot of the absolute residual versus the square root of the fitted value looks almost exactly like the first scatterplot.
+
+# A Quasi-Poisson Regression Model without Spatial Random Effects
+
+```{r}
+mod2_fitted_vals_resids %>%
+    ggplot(aes(sqrt(fitted_val), abs(resid))) +
+    geom_point(alpha = 0.3) +
+    geom_abline(linetype = "dashed", slope = 1, intercept = 0) +
+    labs(x = expression(sqrt("Fitted Value")), y = "Absolute Residual") +
+    theme_bw()
+```
+
+# A Quasi-Poisson Regression Model without Spatial Random Effects
+
+The Pearson dispersion statistic did not change.
+```{r}
+calc_pearson_disperse_stat(mod2)
+```
+
+# A Poisson Regression Model with Spatial Random Effects
+
+Since the empirical semivariogram of the residuals for the Poisson regression model suggests spatial dependence over small distances, we next fit a Poisson regression model with spatial random effects.
+
+To avoid numerical issues, we jitter the coordinates of the sites.
+```{r}
+jittered_data_for_mods <- mutate(
+    data_for_mods,
+    Lat = jitter(Lat, factor = 1e-4), Long = jitter(Long, factor = 1e-4)
+)
+```
+
+# A Poisson Regression Model with Spatial Random Effects
+
+We fit a model with an exponential covariance function.
+
+- We use the coefficient vector from the model in @eq-nonspatial-poisson as the starting value for $\beta$.
+- Since $\sigma^2$ is the variance of a spatial random effect, we use as its starting value the variance of the residuals from the model in @eq-nonspatial-poisson.
+- The starting value for $\phi$ is the reciprocal of the distance at which spatial dependence seems to begin weakening in the empirical semivariogram above.
+- Finally, we use zeros as the starting values for the spatial random effects $w$.
+
+# A Poisson Regression Model with Spatial Random Effects
+
+Unfortunately, the acceptance rate is close to zero. The `spGLM()` call is in the QMD file for these slides. We have tried fiddling with the values of `starting`, `tuning`, and `priors` to increase the acceptance rate, but we have not found values that work well yet.
+```{r}
+#| cache: TRUE
+#| output: FALSE
+
+mod1_coefs <- coef(mod1)
+mod1_resid_var <- var(resid(mod1))
+mod3 <- spGLM(
+    ALL ~ dist_to_water + num_nights + num_detectable_species,
+    family = "poisson",
+    data = jittered_data_for_mods,
+    coords = as.matrix(jittered_data_for_mods[c("Lat", "Long")]),
+    starting = list(
+        beta = mod1_coefs, sigma.sq = mod1_resid_var, phi = 0.5, w = 0
+    ),
+    tuning = list(
+        beta = 0.1 * abs(mod1_coefs),
+        sigma.sq = 0.1 * mod1_resid_var,
+        phi = 0.001,
+        w = 0
+    ),
+    priors = list(
+        sigma.sq.ig = c(2, 3 * mod1_resid_var),
+        phi.unif = c(0.1, 1),
+        beta.normal = list(mod1_coefs, 0.33 * sqrt(abs(mod1_coefs)))
+    ),
+    cov.model = "exponential",
+    n.samples = 5000,
+    verbose = TRUE,
+    n.report = 100
+)
+```
+
+The acceptance rate is just `r mod3$acceptance`\%.
 
 # References
