@@ -28,9 +28,6 @@ scaled_coord_df <- cbind.data.frame("AcousticSite" = df[, "AcousticSite"], scale
 
 ```
 
-
-
-
 ```{r}
 
 model_df <- df %>% dplyr::rename_with(~ gsub("_count", "", .x), ends_with("_count"))  %>% 
@@ -44,64 +41,55 @@ model_df <- df %>% dplyr::rename_with(~ gsub("_count", "", .x), ends_with("_coun
 ```
 
 ```{r}
-
-summary(lm(avg_count ~ Lat + Long + dist_to_water + water_size + Species, model_df))
-
-```
-
-```{r, fig.height=7, fig.width=10}
-
-mainmap <- ne_states(country = c("united states of america"), returnclass = "sf")
-michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia", "Minnesota", "Iowa", "Texas", "Kansas", "Oklahoma", "Nebraska", "Missouri"))
-
-ggplot(data=model_df[model_df$Species %in% c("EPTFUS", "TADBRA"),]) +
-    geom_sf(data = michiganplus) + 
-    facet_wrap(~ Species, ncol=2) + 
-    geom_point(aes(x=Long, y=Lat, color=log1p(avg_count)), size=0.75) +
-    theme_minimal() +
-    theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
-    guides(color = guide_colorbar(title="Sightings/Night\n(Log1p)")) +
-    # geom_jitter(data=sightings_df, size = 1.5, aes(x = Long, y = Lat, color = log1p(count))) +
-    # coord_sf(ylim = c(25, 49), xlim = c(-75, -107)) +
-    # scale_color_viridis_c(name = "Log Counts", option = "B") +
-    ggtitle("Log1p Sightings per Night by Species")
-```
-```{r}
-species <- unique(model_df$Species)
-
-for (species_text in species) {
-    plot_subset <- model_df[model_df$Species == species_text,]
-    variogram <- variog(data=plot_subset$avg_count, coords = plot_subset[, c("Lat", "dist_to_water")])
-    plot(variogram$u, variogram$v, type="l", main=species_text)
-}
-
-```
-
-```{r}
-n.samples <- 5000
-starting <- list("phi"=3/0.5, "sigma.sq"=10, "tau.sq"=5)
-tuning <- list("phi"=0.2, "sigma.sq"=0.05, "tau.sq"=0.05)
-priors <- list(
-    "beta.Norm"=list(rep(0, 16), diag(1, 16)),
-    "phi.Unif"=c(3/1, 3/(0.1 * 1)), 
-    "sigma.sq.IG"=c(2, 1.56 / 2), # Center around residual variance
-    "tau.sq.IG"=c(2, 0.1 * 1.56) # Assume 10% of variance is due to noise
+model_df2 <- mutate(
+    model_df, Long = scale(Long), water_size = scale(water_size)
 )
-cov.model <- "exponential"
+```
 
-spatial_lm <- spBayes::spLM(
-    formula = log1p(avg_count) ~ Long + water_size + Species,
-    data = model_df,
+```{r}
+poisson_mod <- glm(
+    count ~ Long + water_size + Species,
+    poisson,
+    model_df2,
+    offset = log(model_df2$num_nights)
+)
+poisson_mod_fitted_vals_resids <- tibble(
+    fitted_val = fitted(poisson_mod), resid = resid(poisson_mod)
+)
+```
+
+Currently this results in the following error: `c++ Rf_error: dpotrf failed`. The values of `starting`, `tuning`, and `priors` are from my GC2 code, which fit a different model, so they probably need to be changed.
+```{r}
+poisson_mod_coefs <- coef(poisson_mod)
+poisson_mod_resid_var <- var(resid(poisson_mod))
+spatial_poisson_mod <- spGLM(
+    count ~ Long + water_size + Species,
+    family = "poisson",
+    weights = model_df2$num_nights,
+    data = model_df2,
     coords = as.matrix(model_df[, c("Lat", "dist_to_water")]),
-    starting=starting,
-    cov.model = cov.model,
-    n.samples = n.samples,
-    tuning=tuning,
-    priors=priors,
-    verbose=TRUE
+    starting = list(
+        beta = poisson_mod_coefs,
+        sigma.sq = poisson_mod_resid_var,
+        phi = 0.5,
+        w = 0
+    ),
+    tuning = list(
+        beta = 0.1 * abs(poisson_mod_coefs),
+        sigma.sq = 0.1 * poisson_mod_resid_var,
+        phi = 0.001,
+        w = 0
+    ),
+    priors = list(
+        sigma.sq.ig = c(2, 3 * poisson_mod_resid_var),
+        phi.unif = c(0.1, 1),
+        beta.normal = list(
+            poisson_mod_coefs, 0.33 * sqrt(abs(poisson_mod_coefs))
+        )
+    ),
+    cov.model = "exponential",
+    n.samples = 5000,
+    verbose = TRUE,
+    n.report = 100
 )
-```
-
-```{r}
-plot(spatial_lm$p.theta.samples[, "sigma.sq"])
 ```
