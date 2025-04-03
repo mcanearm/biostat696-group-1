@@ -45,9 +45,11 @@ model_df <- df %>% dplyr::rename_with(~ gsub("_count", "", .x), ends_with("_coun
     id.vars = c("AcousticSite", "Lat", "Long", "dist_to_water", "water_size", "num_nights"),
     variable.name="Species",
     value.name="count"
-) %>% dplyr::filter(Species != "ALL" & count != 0) %>% 
+# ) %>% dplyr::filter(Species != "ALL" & count != 0) %>% 
+) %>% dplyr::filter(Species %in% c("EPTFUS", "LASNOC", "PERSUB") & count != 0) %>% 
     transform(avg_count = count / num_nights)
 
+model_df
 ```
 
 ```{r}
@@ -61,10 +63,10 @@ summary(lm(avg_count ~ Lat + Long + dist_to_water + water_size + Species, model_
 mainmap <- ne_states(country = c("united states of america"), returnclass = "sf")
 michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia", "Minnesota", "Iowa", "Texas", "Kansas", "Oklahoma", "Nebraska", "Missouri"))
 
-ggplot(data=model_df[model_df$Species %in% c("EPTFUS", "TADBRA"),]) +
+ggplot(data=model_df[model_df$Species %in% c("EPTFUS", "LASNOC", "PERSUB"),]) +
     geom_sf(data = michiganplus) + 
-    facet_wrap(~ Species, ncol=2) + 
-    geom_point(aes(x=Long, y=Lat, color=log(count)), size=0.75) +
+    facet_wrap(~ Species, ncol=3) + 
+    geom_point(aes(x=Long, y=Lat, color=log(count)), size=2.0) +
     theme_minimal() +
     theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
     guides(color = guide_colorbar(title="Log Detections")) +
@@ -78,8 +80,8 @@ species <- unique(model_df$Species)
 
 for (species_text in species) {
     plot_subset <- model_df[model_df$Species == species_text,]
-    variogram <- variog(data=plot_subset$avg_count, coords = plot_subset[, c("Lat", "dist_to_water")])
-    plot(variogram$u, variogram$v, type="l", main=species_text)
+    variogram <- variog(data=plot_subset$avg_count, coords = plot_subset[, c("Lat", "Long")])
+    plot(variogram$u, variogram$v, type="l", main=species_text, ylab="Var", xlab="Distance")
 }
 
 ```
@@ -90,12 +92,13 @@ colnames(df)
 
 ```{r}
 model_df <- model_df[model_df$count > 0, ]
-coords <- scale(model_df[, c("Lat", "dist_to_water")])
+coords <- as.matrix(model_df[, c("Lat", "Long")])
 coords <- coords + rnorm(nrow(coords) * 2, mean = 0, sd = 0.01) # add a little noise to avoid singularity in the covariance matrix
-scaled_covars <- scale(model_df[, c("Long")])
+scaled_covars <- model_df[, c("dist_to_water")]
 covars <- cbind.data.frame(
     "count"=model_df$count,
-    "long"=scaled_covars, 
+    "avg_count"=model_df$count/model_df$num_nights,
+    "dist_to_water"=scaled_covars, 
     "log_h20_size"=log(model_df$water_size), 
     "species"=model_df$Species
 )
@@ -104,28 +107,28 @@ covars
 
 
 ```{r}
-n.samples <- 5000
+n.samples <- 10000
 starting <- list(
-    "phi" = 1.5,   # Instead of 1 (too extreme)
-    "sigma.sq" = 2,  
-    "tau.sq" = 1,  
+    "phi" = 4,
+    "sigma.sq" = 5,  
+    "tau.sq" = 5,  
     "w" = rep(0, nrow(coords))  # No spatial effect at start
 )
 
 
 
 tuning <- list(
-    "phi" = 0.005,  # Smaller step sizes
-    "sigma.sq" = 0.005,
-    "tau.sq" = 0.005,
-    "beta" = rep(0.001, 16),  # Even smaller for regression coefficients
-    "w"=0.001
+    "phi" = 0.05,  
+    "sigma.sq" = 0.05,
+    "tau.sq" = 0.05,
+    "beta" = rep(0.05, 16),  # Even smaller for regression coefficients
+    "w"=0.05
 )
 
 
 priors <- list(
-    "beta.Norm" = list(rep(0, 16), diag(100, 16)),  # Less strict on betas
-    "phi.Unif" = c(0.1, 5),   # Avoid extreme spatial correlation
+    "beta.Norm" = list(rep(0, 5), diag(100, 5)),  # Less strict on betas
+    "phi.Unif" = c(0.1, 25),   # Avoid extreme spatial correlation
     "sigma.sq.IG" = c(2, 1),  # More reasonable inverse gamma
     "tau.sq.IG" = c(2, 1)
 )
@@ -133,9 +136,10 @@ priors <- list(
 
 cov.model <- "exponential"
 
-spatial_lm <- spBayes::spGLM(
-    formula = count ~ long + log_h20_size + species,
-    family = "poisson",
+spatial_lm <- spBayes::spLM(
+    formula = log(count) ~ dist_to_water + log_h20_size + species,
+    # family = "poisson",
+    amcmc = list(n.batch = 500, batch.length = 50, accept.rate = 0.25),
     data = covars,
     coords = coords,
     starting = starting,
@@ -150,5 +154,15 @@ spatial_lm <- spBayes::spGLM(
 ```
 
 ```{r}
-library(meshed)
+samples <- spRecover(spatial_lm)
 ```
+
+```{r}
+plot(samples$p.theta.samples[, "phi"], type="l")
+
+# plot(samples$p.beta.recover.samples[, "dist_to_water"])
+plot(samples$p.beta.recover.samples[, "dist_to_water"])
+
+plot(samples$p.w.recover.samples[734, ], type="l", main="Spatial Effect Sample Path") # Plot the spatial effect for the first site
+```
+

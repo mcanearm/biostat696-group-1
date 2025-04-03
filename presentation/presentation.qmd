@@ -10,7 +10,7 @@ author:
     - Matt McAnear
     - Sam Rosenberg
     - Victor Verma
-# csl: asa.csl
+csl: diabetologia.csl
 ---
 
 
@@ -52,9 +52,11 @@ author:
 
 ## Data Processing 
 
-- First, find closest bodies of water
+- First, find closest bodies of water from all bodies of water via two sources: @noauthor_north_nodate @noauthor_usa_nodate
 - For each year and species, sum detections
 - ~3,300 total_records, several replicates across years at each of 273 stations
+
+
 
 ## Covariograms by Species
 
