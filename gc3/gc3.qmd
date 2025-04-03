@@ -82,7 +82,7 @@ for (species_text in species) {
 ```{r}
 n.samples <- 5000
 starting <- list("phi"=3/0.5, "sigma.sq"=10, "tau.sq"=5)
-tuning <- list("phi"=0.2, "sigma.sq"=0.05, "tau.sq"=0.05)
+tuning <- list("phi"=0.1, "sigma.sq"=0.05, "tau.sq"=0.05)
 priors <- list(
     "beta.Norm"=list(rep(0, 16), diag(1, 16)),
     "phi.Unif"=c(3/1, 3/(0.1 * 1)), 
@@ -105,5 +105,5 @@ spatial_lm <- spBayes::spLM(
 ```
 
 ```{r}
-plot(spatial_lm$p.theta.samples[, "sigma.sq"])
+plot(spatial_lm$p.theta.samples[500:5000, "tau.sq"], type="line")
 ```
