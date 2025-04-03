@@ -1,0 +1,45 @@
+---
+title: "US Bat Counts"
+format: 
+    revealjs:
+        theme: serif
+        embed-resources: true
+bibliography: references.bib
+csl: asa.csl
+---
+
+
+## Introduction
+
+- Bats are an essential organism in North American ecosystems
+- Insect control; pollination; seed dispersal
+
+
+## Dataset
+
+@noauthor_usfws_2019
+
+- Nightly counts from acoustic monitoring stations in upper Midwest (and Texas, Iowa, and Pennsylvania)
+- 17 Eligible species of bats
+- [Map of stations and corresponding water bodies](https://mcanearm.github.io/bat_counts.html)
+
+## 
+
+![Example acoustic monitoring station at Fort Union Trading Post National Historic Site, South Dakota.](./images/bat_station.jpg)
+
+## Data Processing 
+
+TODO: Add covariograms here
+- First, find closest bodies of water
+- Example covariates
+
+
+
+
+
+
+## References
+
+::: {#refs}
+:::
+
