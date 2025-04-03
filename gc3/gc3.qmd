@@ -45,8 +45,8 @@ model_df <- df %>% dplyr::rename_with(~ gsub("_count", "", .x), ends_with("_coun
     id.vars = c("AcousticSite", "Lat", "Long", "dist_to_water", "water_size", "num_nights"),
     variable.name="Species",
     value.name="count"
-# ) %>% dplyr::filter(Species != "ALL" & count != 0) %>% 
-) %>% dplyr::filter(Species %in% c("EPTFUS", "LASNOC", "PERSUB") & count != 0) %>% 
+) %>% dplyr::filter(Species != "ALL" & count != 0) %>%
+# ) %>% dplyr::filter(Species %in% c("EPTFUS", "LASNOC", "PERSUB") & count != 0) %>% 
     transform(avg_count = count / num_nights)
 
 model_df
@@ -127,7 +127,7 @@ tuning <- list(
 
 
 priors <- list(
-    "beta.Norm" = list(rep(0, 5), diag(100, 5)),  # Less strict on betas
+    "beta.Norm" = list(rep(0, 16), diag(2, 16)),  # Less strict on betas
     "phi.Unif" = c(0.1, 25),   # Avoid extreme spatial correlation
     "sigma.sq.IG" = c(2, 1),  # More reasonable inverse gamma
     "tau.sq.IG" = c(2, 1)
@@ -154,7 +154,7 @@ spatial_lm <- spBayes::spLM(
 ```
 
 ```{r}
-samples <- spRecover(spatial_lm)
+samples <- spRecover(spatial_lm, start = 5000)
 ```
 
 ```{r}
@@ -166,3 +166,7 @@ plot(samples$p.beta.recover.samples[, "dist_to_water"])
 plot(samples$p.w.recover.samples[734, ], type="l", main="Spatial Effect Sample Path") # Plot the spatial effect for the first site
 ```
 
+
+```{r}
+spDiag(samples)
+```
