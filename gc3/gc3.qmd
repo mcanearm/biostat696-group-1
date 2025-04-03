@@ -1,0 +1,109 @@
+---
+title: "matt_qc3"
+format: html
+---
+
+# Matt's QC3
+
+```{r}
+library(geoR)
+library(dplyr)
+library(conflicted)
+library(here)
+library(tidyverse)
+library(scico)
+library(sf)
+library(rnaturalearth)
+library(geoR)
+library(spBayes)
+library(coda)
+library(ggspatial)
+library(dplyr)
+
+df <- read.csv("../data/model_data.csv")
+df
+```
+
+```{r}
+scaled_coords <- scale(df[, c("Lat", "Long", "dist_to_water")])
+scaled_coord_df <- cbind.data.frame("AcousticSite" = df[, "AcousticSite"], scaled_coords)
+
+```
+
+
+
+
+```{r}
+
+model_df <- df %>% dplyr::rename_with(~ gsub("_count", "", .x), ends_with("_count"))  %>% 
+    reshape2::melt(
+    id.vars = c("AcousticSite", "Year", "Lat", "Long", "dist_to_water", "water_size", "num_nights", "num_detectable_species"),
+    variable.name="Species",
+    value.name="count"
+) %>% dplyr::filter(Species != "ALL" & count != 0) %>% 
+    transform(avg_count = count / num_nights)
+
+```
+
+```{r}
+
+summary(lm(avg_count ~ Lat + Long + dist_to_water + water_size + Species, model_df))
+
+```
+
+```{r, fig.height=7, fig.width=10}
+
+mainmap <- ne_states(country = c("united states of america"), returnclass = "sf")
+michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia", "Minnesota", "Iowa", "Texas", "Kansas", "Oklahoma", "Nebraska", "Missouri"))
+
+ggplot(data=model_df[model_df$Species %in% c("EPTFUS", "TADBRA"),]) +
+    geom_sf(data = michiganplus) + 
+    facet_wrap(~ Species, ncol=2) + 
+    geom_point(aes(x=Long, y=Lat, color=log1p(avg_count)), size=0.75) +
+    theme_minimal() +
+    theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
+    guides(color = guide_colorbar(title="Sightings/Night\n(Log1p)")) +
+    # geom_jitter(data=sightings_df, size = 1.5, aes(x = Long, y = Lat, color = log1p(count))) +
+    # coord_sf(ylim = c(25, 49), xlim = c(-75, -107)) +
+    # scale_color_viridis_c(name = "Log Counts", option = "B") +
+    ggtitle("Log1p Sightings per Night by Species")
+```
+```{r}
+species <- unique(model_df$Species)
+
+for (species_text in species) {
+    plot_subset <- model_df[model_df$Species == species_text,]
+    variogram <- variog(data=plot_subset$avg_count, coords = plot_subset[, c("Lat", "dist_to_water")])
+    plot(variogram$u, variogram$v, type="l", main=species_text)
+}
+
+```
+
+```{r}
+n.samples <- 5000
+starting <- list("phi"=3/0.5, "sigma.sq"=10, "tau.sq"=5)
+tuning <- list("phi"=0.1, "sigma.sq"=0.05, "tau.sq"=0.05)
+priors <- list(
+    "beta.Norm"=list(rep(0, 16), diag(1, 16)),
+    "phi.Unif"=c(3/1, 3/(0.1 * 1)), 
+    "sigma.sq.IG"=c(2, 1.56 / 2), # Center around residual variance
+    "tau.sq.IG"=c(2, 0.1 * 1.56) # Assume 10% of variance is due to noise
+)
+cov.model <- "exponential"
+
+spatial_lm <- spBayes::spLM(
+    formula = log1p(avg_count) ~ Long + water_size + Species,
+    data = model_df,
+    coords = as.matrix(model_df[, c("Lat", "dist_to_water")]),
+    starting=starting,
+    cov.model = cov.model,
+    n.samples = n.samples,
+    tuning=tuning,
+    priors=priors,
+    verbose=TRUE
+)
+```
+
+```{r}
+plot(spatial_lm$p.theta.samples[500:5000, "tau.sq"], type="line")
+```
