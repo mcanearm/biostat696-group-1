@@ -106,6 +106,14 @@ model_df <- df2 %>%
     )
 ```
 
+The sites aren't on a grid.
+```{r}
+model_df %>%
+    ggplot(aes(dist_to_water, Lat)) +
+    geom_point(alpha = 0.3) +
+    theme_bw()
+```
+
 First fit a non-spatial Poisson model to the counts.
 ```{r}
 poisson_mod <- glm(
