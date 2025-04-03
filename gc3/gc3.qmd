@@ -28,7 +28,6 @@ df
 scaled_coords <- scale(df[, c("Lat", "Long", "dist_to_water")])
 scaled_coord_df <- cbind.data.frame("AcousticSite" = df[, "AcousticSite"], scaled_coords)
 
-scaled_coord_df
 ```
 
 
@@ -52,20 +51,22 @@ summary(lm(avg_count ~ Lat + Long + dist_to_water + water_size + Species, model_
 
 ```
 
-```{r}
+```{r, fig.height=7, fig.width=10}
 
 mainmap <- ne_states(country = c("united states of america"), returnclass = "sf")
 michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia", "Minnesota", "Iowa", "Texas", "Kansas", "Oklahoma", "Nebraska", "Missouri"))
 
-ggplot(data=model_df[model_df$Species == "EPTFUS",]) +
+ggplot(data=model_df[model_df$Species %in% c("EPTFUS", "TADBRA"),]) +
     geom_sf(data = michiganplus) + 
-    facet_wrap(~ Species, ncol=7) + 
-    geom_point(aes(x=Long, y=Lat, color=log1p(avg_count)))#, fill = "white", color = "black")  +
+    facet_wrap(~ Species, ncol=2) + 
+    geom_point(aes(x=Long, y=Lat, color=log1p(avg_count)), size=0.75) +
+    theme_minimal() +
+    theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
+    guides(color = guide_colorbar(title="Sightings/Night\n(Log1p)")) +
     # geom_jitter(data=sightings_df, size = 1.5, aes(x = Long, y = Lat, color = log1p(count))) +
     # coord_sf(ylim = c(25, 49), xlim = c(-75, -107)) +
-    # theme_minimal() +
     # scale_color_viridis_c(name = "Log Counts", option = "B") +
-    # ggtitle("Log Counts of Bat Sightings at Each Station")
+    ggtitle("Log1p Sightings per Night by Species")
 ```
 ```{r}
 species <- unique(model_df$Species)
