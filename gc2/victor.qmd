@@ -20,7 +20,7 @@ library(spBayes)
 library(tidyverse)
 conflicts_prefer(dplyr::filter, dplyr::lag)
 
-data <- read_csv(here("data/processed/annual_bat_counts.csv"))
+data <- read_csv(here("data/data/annual_bat_counts.csv"))
 
 theme_set(theme_bw())
 
@@ -67,8 +67,23 @@ data_for_mods <- data %>%
     select(
         AcousticSite, Year,
         ALL,
+        "EPTFUS_count",
+        "LASBOR_count",
+        "LASCIN_count",
+        "LASNOC_count",
+        "MYOLUC_count",
+        "MYOSEP_count",
+        "PERSUB_count",
+        "MYOLEI_count",
+        "MYOSOD_count",
+        "NYCHUM_count",
+        "CORRAF_count",
+        "ANTPAL_count",
+        "LASINT_count",  
+        "TADBRA_count",
         Lat, Long,
-        dist_to_water, starts_with("nights_")
+        dist_to_water, water_size, 
+        starts_with("nights_")
     ) %>%
     pivot_longer(
         starts_with("nights_"),
@@ -78,6 +93,10 @@ data_for_mods <- data %>%
     filter(Year == num_nights_year) %>%
     select(!num_nights_year) %>%
     add_column(num_detectable_species)
+
+if (TRUE) {
+    write.csv(data_for_mods, "../data/model_data.csv", row.names = FALSE)
+}
 ```
 
 # Models without Spatial Random Effects
