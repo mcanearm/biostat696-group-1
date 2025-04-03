@@ -168,7 +168,7 @@ spatial_rand_eff_hats <- log(model_df$count / poisson_mod_fitted_vals)
 #     pivot_longer(!AcousticSite1, names_to = "AcousticSite2", values_to = "dist")
 ```
 
-This is excruciatingly slow, and the acceptance rate is 0\%.
+Fit an LRGP with 100 knots.
 ```{r}
 spatial_poisson_mod <- spGLM(
     count ~ Long + water_size,
@@ -176,18 +176,13 @@ spatial_poisson_mod <- spGLM(
     weights = model_df$num_nights,
     data = model_df,
     coords = as.matrix(model_df[, c("Lat", "dist_to_water")]),
+    knots = c(10, 10),
     starting = list(
         beta = poisson_mod_coefs,
         sigma.sq = poisson_mod_resid_var,
         phi = 0.5,
-        w = spatial_rand_eff_hats
+        w = 0
     ),
-    # tuning = list(
-    #     beta = abs(poisson_mod_coefs),
-    #     sigma.sq = poisson_mod_resid_var,
-    #     phi = 0.1,
-    #     w = 0
-    # ),
     priors = list(
         sigma.sq.ig = c(poisson_mod_resid_var, 3 * poisson_mod_resid_var),
         phi.unif = c(0.1, 1),
@@ -198,4 +193,31 @@ spatial_poisson_mod <- spGLM(
     verbose = TRUE,
     n.report = 10
 )
+```
+
+Visualize the knots.
+```{r}
+spatial_poisson_mod %>%
+    `$`("knot.coords") %>%
+    as_tibble() %>%
+    set_names(c("Lat", "dist_to_water")) %>%
+    ggplot(aes(dist_to_water, Lat)) +
+    geom_point() +
+    theme_bw()
+```
+
+The chains all converged.
+```{r}
+spatial_poisson_mod %>%
+    `$`(p.beta.theta.samples) %>%
+    as_tibble() %>%
+    rename(Intercept = `(Intercept)`) %>%
+    mutate(iter = row_number()) %>%
+    filter(iter > 10000) %>%
+    pivot_longer(!iter, names_to = "param", values_to = "estimate") %>%
+    ggplot(aes(iter, estimate)) +
+    facet_wrap(vars(param), scales = "free_y") +
+    geom_line() +
+    scale_y_log10() +
+    theme_bw()
 ```
