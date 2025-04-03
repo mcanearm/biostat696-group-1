@@ -17,9 +17,11 @@ library(rnaturalearth)
 library(geoR)
 library(spBayes)
 library(coda)
+library(ggspatial)
+library(dplyr)
 conflicts_prefer(dplyr::filter, dplyr::lag)
 
-data <- read.csv(here("data/processed/annual_bat_counts.csv")) 
+data <- read.csv(here("data/data/annual_bat_counts.csv")) 
 data <- data |> 
     rename(ALL_count = ALL) |>
     # Drops the mapping polygon information
@@ -43,9 +45,9 @@ Now looking at the full dataset (not dropping stations), the ANTPAL, CORRAF, LAS
 
 ```{r}
 data_long <- data |>
-    group_by(AcousticSite, Lat, Long, dist_to_water, Year) |>
+    group_by(AcousticSite, Lat, Long, dist_to_water) |>
     pivot_longer(
-        cols = ends_with(c("_count", "_meta")), 
+        cols = ends_with(c("_count", "_meta")),
         names_to = c("Species", ".value"),
         names_sep = "_"
     ) |>
@@ -66,17 +68,24 @@ sightings_df <- data_long |>
 It is difficult to discern any patterns in the spatial variation of the mean number of sightings per night by species.
 ```{r}
 mainmap <- ne_states(country = c("united states of america", "canada"), returnclass = "sf")
-michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia"))
+michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia", "Minnesota", "Iowa", "Texas", "Kansas", "Oklahoma", "Nebraska", "Missouri"))
 
-sightings_df |>
-    ggplot() +
-    geom_point(size = .8, aes(x = Long, y = Lat, fill = count)) +
-    geom_sf(data = michiganplus, fill = "white", color = "black") +
-    coord_sf(ylim = c(41, 49), xlim = c(-77, -91)) +
-    facet_wrap(~ Species, nrow = 2) +
+ggplot(data=sightings_df) +
+    geom_sf(data = michiganplus) + #, fill = "white", color = "black")  +
+    geom_jitter(data=sightings_df, size = 1.5, aes(x = Long, y = Lat, color = log1p(count))) +
+    coord_sf(ylim = c(25, 49), xlim = c(-75, -107)) +
     theme_minimal() +
-    scale_fill_scico(palette="batlowK") +
-    ggtitle("Total Sightings at Each Station by Species (Great Lakes Region)")
+    scale_color_viridis_c(name = "Log Counts", option = "B") +
+    ggtitle("Log Counts of Bat Sightings at Each Station")
+```
+
+```{r}
+all_df <- sightings_df[sightings_df$Species == "ALL" & sightings_df$Year==2011,]
+
+
+ggplot() +
+    layer_spatial(data=all_df, aes(fill=count)) +
+    geom_sf(data=all_df) 
 ```
 
 A histogram of total sightings by station suggests outliers for >= 10000 sightings.
