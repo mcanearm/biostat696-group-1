@@ -17,8 +17,30 @@ library(spBayes)
 library(coda)
 library(ggspatial)
 library(dplyr)
+library(xtable)
 
 conflicts_prefer(dplyr::filter, dplyr::select)
+
+great_lakes_states <- ne_states(
+    country = "United States of America", returnclass = "sf"
+) %>%
+    filter(
+        name %in% c(
+            "Minnesota", "Wisconsin", "Illinois", "Indiana", "Michigan", "Ohio",
+            "Pennsylvania", "New York"
+        )
+    )
+ontario <- ne_states(country = "Canada", returnclass = "sf") %>%
+    filter(name == "Ontario")
+great_lakes <- ne_download(
+    scale = 50, type = "lakes", category = "physical", returnclass = "sf"
+) %>%
+    filter(
+        name %in% c(
+            "Lake Superior", "Lake Michigan", "Lake Huron", "Lake Erie",
+            "Lake Ontario"
+        )
+    )
 
 df <- read.csv("../data/model_data.csv")
 ```
@@ -94,15 +116,15 @@ df2 %>%
     arrange(desc(count))
 ```
 
-For now, just try to fit a model using the species with the most detections. Also, put the coordinates and predictors on the same scale.
+We'll fit a model using data on the species whose empirical semivariograms appear reasonable according to Matt. Also, we put the coordinates and the non-`Species` predictors on the same scale.
 ```{r}
 model_df <- df2 %>%
-    # filter(Species == "MYOLUC") %>%
+    filter(Species %in% c("EPTFUS", "LASNOC", "PERSUB")) %>%
     mutate(
-        Lat = as.vector(scale(Lat)),
-        Long = as.vector(scale(Long)),
-        dist_to_water = as.vector(scale(dist_to_water)),
-        water_size = as.vector(scale(water_size))
+        Lat_scaled = as.vector(scale(Lat)),
+        Long_scaled = as.vector(scale(Long)),
+        dist_to_water_scaled = as.vector(scale(dist_to_water)),
+        water_size_scaled = as.vector(scale(water_size))
     )
 ```
 
@@ -171,11 +193,11 @@ poisson_mod_fitted_vals <- unname(fitted(poisson_mod))
 Fit an LRGP with 100 knots.
 ```{r}
 spatial_poisson_mod <- spGLM(
-    count ~ Long + water_size + Species,
+    count ~ Long_scaled + water_size_scaled + Species,
     family = "poisson",
     weights = model_df$num_nights,
     data = model_df,
-    coords = as.matrix(model_df[, c("Lat", "dist_to_water")]),
+    coords = as.matrix(model_df[, c("Lat_scaled", "dist_to_water_scaled")]),
     knots = c(10, 10),
     starting = list(
         beta = poisson_mod_coefs,
@@ -185,7 +207,7 @@ spatial_poisson_mod <- spGLM(
     ),
     priors = list(
         sigma.sq.ig = c(poisson_mod_resid_var, 3 * poisson_mod_resid_var),
-        phi.unif = c(0.1, 1),
+        phi.unif = c(0.1, 10),
         beta.normal = list(poisson_mod_coefs, sqrt(diag(vcov(poisson_mod))))
     ),
     cov.model = "exponential",
@@ -208,16 +230,144 @@ spatial_poisson_mod %>%
 
 The chains all converged.
 ```{r}
-spatial_poisson_mod %>%
+chain_plot <- spatial_poisson_mod %>%
     `$`(p.beta.theta.samples) %>%
     as_tibble() %>%
     rename(Intercept = `(Intercept)`) %>%
     mutate(iter = row_number()) %>%
-    filter(iter > 10000) %>%
+    slice_tail(n = 10000) %>%
     pivot_longer(!iter, names_to = "param", values_to = "estimate") %>%
     ggplot(aes(iter, estimate)) +
-    facet_wrap(vars(param), scales = "free_y") +
+    facet_wrap(vars(param), nrow = 2, scales = "free_y") +
     geom_line() +
-    scale_y_log10() +
+    scale_x_continuous(n.breaks = 3) +
+    labs(x = "Iteration", y = "Estimate") +
     theme_bw()
+ggsave(
+    "../presentation/images/victor/chain_plot.png"#,
+    # width = 4, height = 3, units = "in"
+)
+chain_plot
 ```
+
+These were the acceptance rates in the final batch.
+```{r}
+spatial_poisson_mod$acceptance %>% t() %>% tail(n = 1)
+```
+
+We compute parameter and spatial random effect estimates by taking posterior means.
+```{r}
+beta_hats <- spatial_poisson_mod %>%
+    `$`("p.beta.theta.samples") %>%
+    tail(n = 10000) %>%
+    colMeans()
+w_hats <- spatial_poisson_mod$p.w.samples %>%
+    t() %>%
+    tail(n = 10000) %>%
+    colMeans()
+```
+
+A table with the $\beta$ estimates.
+```{r}
+beta_hats %>%
+    as.matrix() %>%
+    xtable(digits = 2)
+```
+
+
+We use the parameter and spatial random effect estimates to compute fitted values and residuals.
+```{r}
+fitted_vals <- spatial_poisson_mod %>%
+    `$`(X) %>%
+    `rownames<-`(NULL) %>%
+    `%*%`(beta_hats[colnames(.)]) %>%
+    drop() %>%
+    `+`(w_hats) %>%
+    exp() %>%
+    `*`(model_df$num_nights)
+resids <- spatial_poisson_mod %>%
+    `$`("Y") %>%
+    drop() %>%
+    unname() %>%
+    `-`(fitted_vals)
+model_df2 <- add_column(model_df, fitted_val = fitted_vals, resid = resids)
+```
+
+The empirical semivariogram of the residuals looks strange, both because it decreases as distance increases and because of some very large values at large distances.
+```{r}
+resid_variogram <- select(model_df, "Lat", "dist_to_water") %>%
+    add_column(resid = resids) %>%
+    as.geodata(coords.col = 1:2) %>%
+    jitterDupCoords(max = 1e-4) %>%
+    variog(uvec = 100, messages = FALSE)
+png("../presentation/images/victor/resid_variogram.png")
+resid_variogram %>%
+    plot(
+        type = "o",
+        main = "Empirical Semivariogram of Residuals",
+        xlab = "Distance", ylab = "Semivariance"
+    )
+dev.off()
+```
+
+```{r}
+i_max <- which.max(variogram$v)
+variogram$u[i_max]
+```
+
+```{r}
+make_resid_plot <- function(species) {
+    ggplot() +
+        geom_sf(data = great_lakes_states, color = "black", fill = "white") +
+        geom_sf(data = ontario, color = "black", fill = "white") +
+        geom_sf(data = great_lakes, color = "lightblue", fill = "lightblue") +
+        geom_point(
+            aes(Long, Lat, color = resid), filter(model_df2, Species == species)
+        ) +
+        scale_color_gradient(low = "blue", high = "red") +
+        coord_sf(xlim = c(-92, -76), ylim = c(41, 49)) +
+        labs(
+            x = "Longitude", y = "Latitude", color = "Residual", title = species
+        ) +
+        theme_minimal() +
+        theme(legend.position = "top", plot.title = element_text(hjust = 0.5))
+}
+```
+
+```{r}
+resid_plots <- model_df2 %>%
+    distinct(Species) %>%
+    mutate(resid_plot = map(Species, make_resid_plot))
+```
+
+For some reason this produces images with weird areas of darkness.
+```{r}
+with(
+    resid_plots,
+    walk2(
+        Species, resid_plot,
+        ~ ggsave(str_glue("../presentation/images/victor/{.x}.png"), .y)
+    )
+)
+```
+
+```{r}
+with(
+    resid_plots,
+    walk2(
+        Species, resid_plot,
+        ~ print(.y)
+    )
+)
+```
+
+For some reason this produces images with weird areas of darkness.
+```{r}
+for (i in seq_len(nrow(resid_plots))) {
+    ggsave(
+        str_glue("../presentation/images/victor/{resid_plots$Species[i]}.png"),
+        resid_plots$resid_plot[[i]]
+    )
+}
+```
+
