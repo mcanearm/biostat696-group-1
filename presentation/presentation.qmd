@@ -14,11 +14,13 @@ csl: diabetologia.csl
 ---
 
 
-## Introduction
+# Introduction
+
+## Why this dataset?
 
 - Bats are an essential organism in North American ecosystems
 - Insect control; pollination; seed dispersal
-- Bat populations face threats from habitat loss, climate change, and white nose-syndrom [@noauthor_white-nose_nodate]
+- Bat populations face threats from habitat loss, climate change, and white nose-syndrome [@noauthor_white-nose_nodate].
 
 
 ## Dataset - USFWS Great Lakes and Upper Midwest Acoustic Acoustic Bat Dataset [@noauthor_usfws_2019]
@@ -27,7 +29,6 @@ csl: diabetologia.csl
 - 14 Eligible species of bats
 
 ![Example acoustic monitoring station at Fort Union Trading Post National Historic Site, South Dakota.](./images/bat_station.jpg)
-
 
 
 ## Species
@@ -49,12 +50,19 @@ csl: diabetologia.csl
 - LASINT: northern yellow bat (Lasiurus intermedius) 
 
 
+## Research Questions
+
+- Do the counts of bats vary geographically?
+- Do the counts of bats vary by species?
+- How does distance to water affect these measurements?
+- Is it better to consider distance to water a covariate or a coordinate?
+
 ## 
-![Log Detections across Stations for 3 Species](./images/bat_sightings.png)
+![](./images/bat_sightings.png)
 
 
 ## Lat/Long Variograms
-![Covariograms by species](./images/lat_long_variograms.png)
+![](./images/lat_long_variograms.png)
 
 
 ## Data Processing 
@@ -64,44 +72,73 @@ csl: diabetologia.csl
 - ~3,300 total_records, several replicates across years at each of 273 stations
 - Reduce the total number of records if summarizing across years
 
-## 
-![All water bodies shapefile](./images/water.png){fig-align="center" width="100%"}
+## All Water Bodies
+![](./images/water.png){fig-align="center" width="100%"}
 
 
 ## Interactive Map
 [Map of stations and corresponding water bodies](https://mcanearm.github.io/bat_counts.html)
 
 
+# Models
 
-## Model Specification
 
-<!-- priors <- list( -->
-<!--     "beta.Norm" = list(rep(0, 4), diag(2, 4)),  # Less strict on betas -->
-<!--     "phi.Unif" = c(0.1, 25),   # Avoid extreme spatial correlation -->
-<!--     "nu.Unif" = c(0.5, 2.5), -->
-<!--     "sigma.sq.IG" = c(2, 1),  # More reasonable inverse gamma -->
-<!--     "tau.sq.IG" = c(2, 1) -->
-<!-- ) -->
+## Three-Species Model
+
+- Three species with sensible lat/long variograms 
+    - Big Brown Bat (EPTFUS)
+    - Silver-Haired Bat (LASNOC)
+    - Tri-colored Bat (PERSUB)
+- These species range across all of our stations
+
+## Specification
 
 Let $C_\theta$ represent the standard exponential kernel. We use a simple model to start,
-with the distance function decided completely by latitude and longitude\footnote{}.
+with the distance function decided completely by latitude and longitude. Our
+covariates are (1) Species and (2) Distance to Water 
 
 
-$$
-\beta \sim \mathcal{N}(0, 4I_n) \\
-\phi \sim \text{Unif}(0.1, 25) \\
-\sigma^2 \sim \text{IG}(2, 1) \\
-\tau^2 \sim \text{IG}(2, 1) \\
-
-W \sim \mathcal{N}(0, C_{\theta}(\cdot, \cdot)), \text{where } C_{\theta}\\
-
-Y \sim \mathcal{N}(X\beta + W, \tau^2I_n)
-$$
-
-
+\begin{align*}
+    \beta &\sim N(0, 4I_n) \\
+    \phi &\sim \text{Unif}(0.1, 25) \\
+    \sigma^2 &\sim \text{IG}(2, 1) \\
+    \tau^2 &\sim \text{IG}(2, 1) \\
+    
+    W &\sim MVN(0, C_{\theta}(\cdot, \cdot))\\
+    
+    Y &\sim MVN(X\beta + W, \tau^2I_n)
+\end{align*}
 
 
+# Fitting
 
+##
+
+![](./images/three_species_model/traceplots.png){fig-align="center"}
+
+
+## Performance
+
+- Variogram of residuals still has some remaining spatial variation
+- Confirmed by Moran's I-test (0.39, $p \approx 0$).
+
+![](./images/three_species_model/residual_variogram.png){fig-align="center"}
+
+## Residual Distribution
+
+![](./images/three_species_model/residual_densities.png)
+
+
+## Spatial Effects
+
+![](./images/three_species_model/estimated_spatial_effects.png)
+
+## Potential New Covariates
+
+- Urban/rural
+- Agricultural Outputs
+- Land Use
+- TODO: Add raster for estimated spatial effects across US including use of distance to water, and for each species
 
 ## References
 
