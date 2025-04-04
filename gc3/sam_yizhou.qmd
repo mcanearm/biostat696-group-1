@@ -169,22 +169,72 @@ residual_plot_data <- cbind.data.frame(
     'var'=posterior_var,
     'mean'=posterior_mean,
     'true'=spatial_lm_fit$Y,
-    'lat'=coords[, 1],
-    'long'=coords[, 2],
+    'lat'=model_df$Lat,
+    'long'=model_df$Long,
+    'lat_norm'=model_df$Lat_norm,
+    'long_norm'=model_df$Long_norm,
+    'dist_to_water_norm'=model_df$dist_to_water_norm,
     'species'=model_df$Species,
-    'resid' = samples$Y - posterior_mean
+    'resid'=spatial_lm_fit$Y - posterior_mean,
+    'spatial_effect'=apply(spatial_lm_fit$p.w.recover.samples, 1, mean)
 )
 residual_plot_data <- residual_plot_data[order(residual_plot_data$mean),]
 residual_plot_data$idx <- seq(1, nrow(residual_plot_data))
 
 
 plot(
-    variog(data=residual_plot_data$resid, coords = cbind(residual_plot_data$lat, residual_plot_data$long), uvec=10),
+    variog(data=residual_plot_data$resid, coords = cbind(residual_plot_data$lat_norm, residual_plot_data$dist_to_water_norm), uvec=10),
     main="Residual Variogram"
 )
+```
 
+```{r}
 library(spdep)
-nb <- knn2nb(knearneigh(coords, k = 4))  # Define neighbors
+nb <- knn2nb(knearneigh(model_df[, c("Lat_norm", "dist_to_water_norm")], k = 4))  # Define neighbors
 listw <- nb2listw(nb, style = "W")  # Create spatial weights
 moran.test(residual_plot_data$resid, listw)  # Run Moran's I test
+```
+
+```{r}
+residual_plot_data |> 
+    dplyr::filter(species %in% c("EPTFUS", "LASNOC", "PERSUB")) |>
+    ggplot(aes(x=resid, fill=species)) + 
+        geom_density(alpha=0.5) + 
+        scale_fill_viridis_d() +
+        labs(
+            title="Residual Density by Species",
+            x="Residuals",
+            y="Density"
+        ) 
+```
+
+
+```{r}
+residual_plot_data |>
+    dplyr::filter(species %in% c("EPTFUS", "LASNOC", "PERSUB")) |>
+    ggplot(aes(x=mean, y=resid)) + 
+        geom_point(size=2.0) +
+        theme_minimal() +
+        theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
+        geom_hline(yintercept=0, linetype="dashed") +
+        facet_wrap(.~species, ncol=1)
+        # guides(color = guide_colorbar(title="Residuals")) +
+        # geom_jitter(data=sightings_df, size = 1.5, aes(x = Long, y = Lat, color = log1p(count))) +
+        # coord_sf(ylim = c(25, 49), xlim = c(-75, -107)) +
+        # scale_color_viridis_c(name = "Log Counts", option = "B") +
+        # ggtitle("Residuals by Species")
+```
+
+```{r}
+residual_plot_data |>
+    dplyr::filter(species %in% c("EPTFUS", "LASNOC", "PERSUB")) |>
+    ggplot() +
+        geom_sf(data = michiganplus) + 
+        # facet_wrap(~ Species, ncol=3) + 
+        geom_tile(aes(x=long, y=lat, fill=spatial_effect), width=0.25, height=0.25) +
+        theme_minimal() +
+        theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
+        coord_sf(ylim = c(40, 49), xlim = c(-75, -100)) +
+        # scale_color_viridis_c(name = "Log Counts", option = "B") +
+        ggtitle("Estimated Spatial Effects")
 ```
