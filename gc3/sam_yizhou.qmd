@@ -1,0 +1,149 @@
+---
+title: "matt_qc3"
+format: html
+---
+
+# Sam and Yizhou's QC3 Model
+
+```{r}
+library(geoR)
+library(dplyr)
+library(conflicted)
+library(here)
+library(tidyverse)
+library(scico)
+library(sf)
+library(rnaturalearth)
+library(geoR)
+library(spBayes)
+library(coda)
+library(ggspatial)
+library(dplyr)
+
+df <- read.csv("../data/model_data.csv")
+df
+```
+
+```{r}
+scaled_coords <- scale(df[, c("Lat", "Long", "dist_to_water")])
+scaled_coord_df <- cbind.data.frame("AcousticSite" = df[, "AcousticSite"], scaled_coords)
+
+```
+
+
+
+
+```{r}
+
+model_df <- df %>% dplyr::rename_with(~ gsub("_count", "", .x), ends_with("_count"))  %>% 
+    reshape2::melt(
+    id.vars = c("AcousticSite", "Year", "Lat", "Long", "dist_to_water", "water_size", "num_nights", "num_detectable_species"),
+    variable.name="Species",
+    value.name="count"
+) %>% dplyr::filter(Species != "ALL" & count != 0) %>% 
+    # Combine years together to remove temporal replicates
+    dplyr::group_by(AcousticSite, Lat, Long, dist_to_water, water_size, Species, num_detectable_species) %>%
+    dplyr::summarise(num_nights = sum(num_nights), count = sum(count)) %>%
+    transform(avg_count = count / num_nights) 
+
+```
+
+```{r}
+
+summary(lm(avg_count ~ Lat + Long + dist_to_water + water_size + Species, model_df))
+
+```
+
+```{r, fig.height=7, fig.width=10}
+
+mainmap <- ne_states(country = c("united states of america"), returnclass = "sf")
+michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia", "Minnesota", "Iowa", "Texas", "Kansas", "Oklahoma", "Nebraska", "Missouri"))
+
+ggplot(data=model_df[model_df$Species %in% c("EPTFUS", "TADBRA"),]) +
+    geom_sf(data = michiganplus) + 
+    facet_wrap(~ Species, ncol=2) + 
+    geom_point(aes(x=Long, y=Lat, color=log1p(avg_count)), size=0.75) +
+    theme_minimal() +
+    theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
+    guides(color = guide_colorbar(title="Sightings/Night\n(Log1p)")) +
+    # geom_jitter(data=sightings_df, size = 1.5, aes(x = Long, y = Lat, color = log1p(count))) +
+    # coord_sf(ylim = c(25, 49), xlim = c(-75, -107)) +
+    # scale_color_viridis_c(name = "Log Counts", option = "B") +
+    ggtitle("Log1p Sightings per Night by Species")
+```
+```{r}
+species <- unique(model_df$Species)
+
+# Jitter the spatial variables in order to deal with we have replicates due to
+# multiple species at the same site.
+# Then apply z-score standardization to latitude and distance to water to ensure
+# spatial coordinates are on similar scale.
+model_df <- model_df |>
+    dplyr::mutate(
+        Lat = jitter(Lat, 1e-6),
+        Long = jitter(Long, 1e-6),
+        dist_to_water = jitter(dist_to_water, 1e-6)
+    ) |>
+    mutate(
+        Lat_norm = scale(Lat),
+        Long_norm = scale(Long),
+        dist_to_water_norm = scale(dist_to_water)
+    )
+
+for (species_text in species) {
+    plot_subset <- model_df[model_df$Species == species_text,]
+    variogram <- variog(data=plot_subset$avg_count, coords = plot_subset[, c("Lat_norm", "dist_to_water_norm")])
+    plot(variogram$u, variogram$v, type="l", main=species_text)
+}
+
+```
+
+```{r}
+n.samples <- 5000
+starting <- list("phi"=3/0.5, "sigma.sq"=10, "tau.sq"=5)
+tuning <- list("phi"=0.1, "sigma.sq"=0.05, "tau.sq"=0.05)
+priors <- list(
+    "beta.Norm"=list(rep(0, 16), diag(1, 16)),
+    "phi.Unif"=c(3/2, 3/(0.1 * 2)), 
+    "sigma.sq.IG"=c(2, 24.44^2), # Center around residual variance
+    "tau.sq.IG"=c(2, 0.1 * 24.44^2) # Assume 10% of variance is due to noise
+)
+cov.model <- "exponential"
+amcmc = list(n.batch = 500, batch.length = 50, accept.rate = 0.25)
+
+spatial_lm <- spBayes::spLM(
+    formula=log1p(avg_count) ~ Long_norm + water_size + Species,
+    data=model_df,
+    coords=as.matrix(model_df[, c("Lat_norm", "dist_to_water_norm")]),
+    starting=starting,
+    cov.model=cov.model,
+    amcmc=amcmc,
+    n.samples=n.samples,
+    tuning=tuning,
+    priors=priors,
+    verbose=TRUE
+)
+
+spatial_lm_fit <- spatial_lm %>% spRecover(start=round(n.samples/3), verbose=TRUE)
+```
+
+```{r}
+## Check for MCMC convergence
+# Check trace plots
+par(mfrow=c(3,2))
+ts.plot(spatial_lm_fit$p.beta.recover.samples[,1], main = "beta", ylab = "")
+ts.plot(spatial_lm_fit$p.theta.recover.samples[,1], main = "sigma^2", ylab = "")
+ts.plot(spatial_lm_fit$p.theta.recover.samples[,2], main = "tau^2", ylab = "")
+ts.plot(spatial_lm_fit$p.theta.recover.samples[,3], main = "phi", ylab = "")
+ts.plot(spatial_lm_fit$p.w.recover.samples[,4], main = "beta[1]", ylab = "")
+
+# Check ACF plots 
+autocorr.plot(as.mcmc(spatial_lm_fit$p.theta.recover.samples))
+
+# Check acceptance rates and effective sample size
+spatial_lm_fit$acceptance
+effectiveSize(as.mcmc(spatial_lm_fit$p.theta.recover.samples))
+
+# Check model diagnostics
+spDiag(spatial_lm_fit, start=round(n.samples/3), verbose=TRUE)
+```
