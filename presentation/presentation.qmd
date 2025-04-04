@@ -73,35 +73,57 @@ csl: diabetologia.csl
 
 
 
-## Model Specification
+# Models
 
-<!-- priors <- list( -->
-<!--     "beta.Norm" = list(rep(0, 4), diag(2, 4)),  # Less strict on betas -->
-<!--     "phi.Unif" = c(0.1, 25),   # Avoid extreme spatial correlation -->
-<!--     "nu.Unif" = c(0.5, 2.5), -->
-<!--     "sigma.sq.IG" = c(2, 1),  # More reasonable inverse gamma -->
-<!--     "tau.sq.IG" = c(2, 1) -->
-<!-- ) -->
+
+## Three-Species Model
+
+- Three species with sensible lat/long variograms 
+    - Big Brown Bat (EPTFUS)
+    - Silver-Haired Bat (LASNOC)
+    - Tri-colored Bat (PERSUB)
+- These species range across all of our stations
+
+## Specification
 
 Let $C_\theta$ represent the standard exponential kernel. We use a simple model to start,
-with the distance function decided completely by latitude and longitude\footnote{}.
+with the distance function decided completely by latitude and longitude. Our
+covariates are (1) Species and (2) Distance to Water 
 
 
-$$
-\beta \sim \mathcal{N}(0, 4I_n) \\
-\phi \sim \text{Unif}(0.1, 25) \\
-\sigma^2 \sim \text{IG}(2, 1) \\
-\tau^2 \sim \text{IG}(2, 1) \\
-
-W \sim \mathcal{N}(0, C_{\theta}(\cdot, \cdot)), \text{where } C_{\theta}\\
-
-Y \sim \mathcal{N}(X\beta + W, \tau^2I_n)
-$$
-
-
+\begin{align*}
+    \beta &\sim N(0, 4I_n) \\
+    \phi &\sim \text{Unif}(0.1, 25) \\
+    \sigma^2 &\sim \text{IG}(2, 1) \\
+    \tau^2 &\sim \text{IG}(2, 1) \\
+    
+    W &\sim MVN(0, C_{\theta}(\cdot, \cdot))\\
+    
+    Y &\sim MVN(X\beta + W, \tau^2I_n)
+\end{align*}
 
 
+## Performance
 
+- Variogram of residuals still has some remaining spatial variation
+- Confirmed by Moran's I-test (0.39, $p \approx 0$).
+
+![](./images/three_species_model/residual_variogram.png){fig-align="center"}
+
+## Residual Distribution
+
+![](./images/three_species_model/residual_densities.png)
+
+
+## Spatial Effects
+
+![](./images/three_species_model/estimated_spatial_effects.png)
+
+## Potential New Covariates
+
+- Urban/rural
+- Agricultural Outputs
+- Land Use
 
 ## References
 
