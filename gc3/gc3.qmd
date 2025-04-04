@@ -175,15 +175,15 @@ spatial_lm <- spBayes::spLM(
 samples <- spRecover(spatial_lm, start = 10000)
 ```
 
-```{r}
-plot(samples$p.theta.recover.samples[, "phi"], type="l")
+```{r, fig.width=8, fig.height=6}
+plot(samples$p.theta.recover.samples)
 
 # plot(samples$p.beta.recover.samples[, "dist_to_water"])
-plot(samples$p.beta.recover.samples[, "dist_to_water"])
+# plot(samples$p.beta.recover.samples[, c("dist_to_water", "speciesPERSUB", "speciesLASNOC")])
 
-plot(samples$p.beta.recover.samples[, "speciesPERSUB"])
+# plot(samples$p.beta.recover.samples[, "speciesPERSUB"])
 
-plot(samples$p.w.recover.samples[700, ], type="l", main="Spatial Effect Sample Path") # Plot the spatial effect for the first site
+# plot(samples$p.w.recover.samples[700, ], type="l", main="Spatial Effect Sample Path") # Plot the spatial effect for the first site
 ```
 
 

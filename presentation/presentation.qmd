@@ -14,11 +14,13 @@ csl: diabetologia.csl
 ---
 
 
-## Introduction
+# Introduction
+
+## Why this dataset?
 
 - Bats are an essential organism in North American ecosystems
 - Insect control; pollination; seed dispersal
-- Bat populations face threats from habitat loss, climate change, and white nose-syndrom [@noauthor_white-nose_nodate]
+- Bat populations face threats from habitat loss, climate change, and white nose-syndrome [@noauthor_white-nose_nodate].
 
 
 ## Dataset - USFWS Great Lakes and Upper Midwest Acoustic Acoustic Bat Dataset [@noauthor_usfws_2019]
@@ -27,7 +29,6 @@ csl: diabetologia.csl
 - 14 Eligible species of bats
 
 ![Example acoustic monitoring station at Fort Union Trading Post National Historic Site, South Dakota.](./images/bat_station.jpg)
-
 
 
 ## Species
@@ -49,12 +50,19 @@ csl: diabetologia.csl
 - LASINT: northern yellow bat (Lasiurus intermedius) 
 
 
+## Research Questions
+
+- Do the counts of bats vary geographically?
+- Do the counts of bats vary by species?
+- How does distance to water affect these measurements?
+- Is it better to consider distance to water a covariate or a coordinate?
+
 ## 
-![Log Detections across Stations for 3 Species](./images/bat_sightings.png)
+![](./images/bat_sightings.png)
 
 
 ## Lat/Long Variograms
-![Covariograms by species](./images/lat_long_variograms.png)
+![](./images/lat_long_variograms.png)
 
 
 ## Data Processing 
@@ -64,13 +72,12 @@ csl: diabetologia.csl
 - ~3,300 total_records, several replicates across years at each of 273 stations
 - Reduce the total number of records if summarizing across years
 
-## 
-![All water bodies shapefile](./images/water.png){fig-align="center" width="100%"}
+## All Water Bodies
+![](./images/water.png){fig-align="center" width="100%"}
 
 
 ## Interactive Map
 [Map of stations and corresponding water bodies](https://mcanearm.github.io/bat_counts.html)
-
 
 
 # Models
@@ -103,6 +110,13 @@ covariates are (1) Species and (2) Distance to Water
 \end{align*}
 
 
+# Fitting
+
+##
+
+![](./images/three_species_model/traceplots.png){fig-align="center"}
+
+
 ## Performance
 
 - Variogram of residuals still has some remaining spatial variation
@@ -124,6 +138,7 @@ covariates are (1) Species and (2) Distance to Water
 - Urban/rural
 - Agricultural Outputs
 - Land Use
+- TODO: Add raster for estimated spatial effects across US including use of distance to water, and for each species
 
 ## References
 
