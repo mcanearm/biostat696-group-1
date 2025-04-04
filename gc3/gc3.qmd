@@ -25,24 +25,31 @@ df
 ```
 
 ```{r}
-scaled_coords <- scale(df[, c("Lat", "Long", "dist_to_water")])
-scaled_coord_df <- cbind.data.frame("AcousticSite" = df[, "AcousticSite"], scaled_coords)
+# sum counts by year
+df <- df %>%
+    group_by(AcousticSite, Lat, Long, dist_to_water, water_size) %>%
+    summarise(
+        across(ends_with("_count"), sum, na.rm = TRUE),
+        num_nights = sum(num_nights, na.rm = TRUE),
+    ) %>%
+    ungroup()
 
+df
 ```
-
-
 
 
 ```{r}
 
 model_df <- df %>% dplyr::rename_with(~ gsub("_count", "", .x), ends_with("_count"))  %>% 
     reshape2::melt(
-    id.vars = c("AcousticSite", "Year", "Lat", "Long", "dist_to_water", "water_size", "num_nights", "num_detectable_species"),
+    id.vars = c("AcousticSite", "Lat", "Long", "dist_to_water", "water_size", "num_nights"),
     variable.name="Species",
     value.name="count"
-) %>% dplyr::filter(Species != "ALL" & count != 0) %>% 
+) %>% dplyr::filter(Species != "ALL" & count != 0) %>%
+# ) %>% dplyr::filter(Species %in% c("EPTFUS", "LASNOC", "PERSUB") & count != 0) %>%
     transform(avg_count = count / num_nights)
 
+model_df
 ```
 
 ```{r}
@@ -56,54 +63,139 @@ summary(lm(avg_count ~ Lat + Long + dist_to_water + water_size + Species, model_
 mainmap <- ne_states(country = c("united states of america"), returnclass = "sf")
 michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia", "Minnesota", "Iowa", "Texas", "Kansas", "Oklahoma", "Nebraska", "Missouri"))
 
-ggplot(data=model_df[model_df$Species %in% c("EPTFUS", "TADBRA"),]) +
+ggplot(data=model_df[model_df$Species %in% c("EPTFUS", "LASNOC", "PERSUB"),]) +
     geom_sf(data = michiganplus) + 
-    facet_wrap(~ Species, ncol=2) + 
-    geom_point(aes(x=Long, y=Lat, color=log1p(avg_count)), size=0.75) +
+    facet_wrap(~ Species, ncol=3) + 
+    geom_point(aes(x=Long, y=Lat, color=log(count)), size=2.0) +
     theme_minimal() +
     theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
-    guides(color = guide_colorbar(title="Sightings/Night\n(Log1p)")) +
+    guides(color = guide_colorbar(title="Log Detections")) +
     # geom_jitter(data=sightings_df, size = 1.5, aes(x = Long, y = Lat, color = log1p(count))) +
     # coord_sf(ylim = c(25, 49), xlim = c(-75, -107)) +
     # scale_color_viridis_c(name = "Log Counts", option = "B") +
-    ggtitle("Log1p Sightings per Night by Species")
+    ggtitle("Log Detections by Species")
 ```
-```{r}
-species <- unique(model_df$Species)
+```{r, fig.width=12, fig.height=8}
 
-for (species_text in species) {
-    plot_subset <- model_df[model_df$Species == species_text,]
-    variogram <- variog(data=plot_subset$avg_count, coords = plot_subset[, c("Lat", "dist_to_water")])
-    plot(variogram$u, variogram$v, type="l", main=species_text)
-}
 
+species_text <- unique(model_df$Species)
+
+variograms <- lapply(species_text, function(species_val) {
+    species_df <- model_df[model_df$Species == species_val,]
+    vario <- variog(data=species_df$avg_count, coords = species_df[, c("Lat", "Long")])
+    cbind.data.frame("species"=species_val, data.frame(vario[c("u", "v", "sd")]))
+})
+
+vario_plot <- do.call(rbind, variograms)
+
+ggplot(data = vario_plot, aes(x=u, y=v)) +
+    geom_line() +
+    facet_wrap(~ species, scales="free") +
+    labs(x = "Distance", y = "Semivariance") +
+    # geom_errorbar(aes(ymin = v - 2*sd, ymax = v + 2*sd), width = 0.1) +
+    scale_y_log10() +
+    theme_minimal() +
+    ggtitle("Empirical Semivariogram by Species") +
+    labs(y = "Average Count")
 ```
 
 ```{r}
-n.samples <- 5000
-starting <- list("phi"=3/0.5, "sigma.sq"=10, "tau.sq"=5)
-tuning <- list("phi"=0.1, "sigma.sq"=0.05, "tau.sq"=0.05)
-priors <- list(
-    "beta.Norm"=list(rep(0, 16), diag(1, 16)),
-    "phi.Unif"=c(3/1, 3/(0.1 * 1)), 
-    "sigma.sq.IG"=c(2, 1.56 / 2), # Center around residual variance
-    "tau.sq.IG"=c(2, 0.1 * 1.56) # Assume 10% of variance is due to noise
+colnames(df)
+```
+
+```{r}
+
+model_df <- model_df |> dplyr::filter(Species %in% c("EPTFUS", "LASNOC", "PERSUB")) |> 
+    dplyr::mutate(Species = factor(Species)) |> 
+    dplyr::mutate(across(c(Lat, Long, dist_to_water, water_size), scale)) |> 
+    dplyr::mutate(across(c(count, avg_count), log1p))
+coords <- as.matrix(model_df[, c("Lat", "Long")])
+coords <- coords + rnorm(nrow(coords) * 2, mean = 0, sd = 0.01) # add a little noise to avoid singularity in the covariance matrix
+scaled_covars <- model_df[, c("dist_to_water")]
+covars <- cbind.data.frame(
+    "count"=model_df$count,
+    "avg_count"=model_df$count/model_df$num_nights,
+    "dist_to_water"=scaled_covars, 
+    "log_h20_size"=log(model_df$water_size), 
+    "species"=model_df$Species
 )
+covars
+```
+
+
+```{r}
+# n.samples <- 10000
+starting <- list(
+    "phi" = 4,
+    "sigma.sq" = 5,  
+    "tau.sq" = 5,  
+    "w" = rep(0, nrow(coords)),  # No spatial effect at start
+    "nu" = 2.5
+)
+
+
+
+tuning <- list(
+    "phi" = 0.05,  
+    "sigma.sq" = 0.05,
+    "tau.sq" = 0.05,
+    "beta" = rep(0.05, 4),  # Even smaller for regression coefficients
+    "w"=0.05,
+    "nu" = 0.05
+)
+
+
+priors <- list(
+    "beta.Norm" = list(rep(0, 4), diag(2, 4)),  # Less strict on betas
+    "phi.Unif" = c(0.1, 25),   # Avoid extreme spatial correlation
+    "nu.Unif" = c(0.5, 2.5),
+    "sigma.sq.IG" = c(2, 1),  # More reasonable inverse gamma
+    "tau.sq.IG" = c(2, 1)
+)
+
+
 cov.model <- "exponential"
 
 spatial_lm <- spBayes::spLM(
-    formula = log1p(avg_count) ~ Long + water_size + Species,
-    data = model_df,
-    coords = as.matrix(model_df[, c("Lat", "dist_to_water")]),
-    starting=starting,
+    formula = log(avg_count) ~ dist_to_water + species,
+    # family = "poisson",
+    amcmc = list(n.batch = 500, batch.length = 25, accept.rate = 0.25),
+    data = covars,
+    coords = coords,
+    starting = starting,
     cov.model = cov.model,
     n.samples = n.samples,
-    tuning=tuning,
-    priors=priors,
-    verbose=TRUE
+    tuning = tuning,
+    priors = priors,
+    verbose = TRUE
 )
+
+
 ```
 
 ```{r}
-plot(spatial_lm$p.theta.samples[500:5000, "tau.sq"], type="line")
+samples <- spRecover(spatial_lm, start = 10000)
+```
+
+```{r}
+plot(samples$p.theta.samples[, "phi"], type="l")
+
+# plot(samples$p.beta.recover.samples[, "dist_to_water"])
+plot(samples$p.beta.recover.samples[, "dist_to_water"])
+
+plot(samples$p.beta.recover.samples[, "speciesPERSUB"])
+
+plot(samples$p.w.recover.samples[100, ], type="l", main="Spatial Effect Sample Path") # Plot the spatial effect for the first site
+
+samples$p.theta.recover.samples
+```
+
+
+```{r}
+spDiag(samples)
+```
+
+
+```{r}
+sf::read_sf("../data/data/")
 ```
