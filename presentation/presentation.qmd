@@ -1,9 +1,10 @@
 ---
 title: "US Bat Counts"
-format: 
-    revealjs:
-        theme: serif
-        embed-resources: true
+format: pdf
+    # revealjs:
+    #     theme: serif
+    #     embed-resources: true
+    
 bibliography: references.bib
 author: 
     - Yizhou Gu
@@ -15,6 +16,11 @@ csl: diabetologia.csl
 
 
 # Introduction
+
+## GC3 Info
+
+- We have a revealJS template that looks nicer for the presentation. These are the slides.
+- Source code and repo are located on [Github](https://github.com/mcanearm/biostat696-group-1)
 
 ## Why this dataset?
 
@@ -93,22 +99,23 @@ csl: diabetologia.csl
 
 ## Three-Species Model - Specification
 
-Let $C_\theta$ represent the standard exponential kernel. We use a simple model to start,
-with the distance function decided completely by latitude and longitude. Our
-covariates are (1) Species and (2) Distance to Water 
+- Coordinates are latitude and longitude, as expected
+- Covariates are: 
+    - Species
+    - Distance to water 
 
+- Let $C_\theta$ represent the standard exponential kernel. 
+
+## Model
 
 \begin{align*}
     \beta &\sim N(0, 4I_n) \\
     \phi &\sim \text{Unif}(0.1, 25) \\
     \sigma^2 &\sim \text{IG}(2, 1) \\
     \tau^2 &\sim \text{IG}(2, 1) \\
-    
     W &\sim MVN(0, C_{\theta}(\cdot, \cdot))\\
-    
     Y &\sim MVN(X\beta + W, \tau^2I_n)
 \end{align*}
-
 
 # Three-Species Model - Fitting
 
@@ -142,9 +149,12 @@ covariates are (1) Species and (2) Distance to Water
 
 ## Alt. Coordinate System - Specification
 
-Let $C_\theta$ represent the standard exponential kernel. We use a simple model to start,
-with the distance function decided completely by latitude and distance to water (normalized) Our
-covariates are (1) Species, (2) Longitude, and (3) Size of Nearest Water Body
+
+- We use a simple model to start, with the distance function decided completely by latitude and distance to water (normalized)
+- Our covariates are (1) Species, (2) Longitude, and (3) Size of Nearest Water Body
+- Let $C_\theta$ represent the standard exponential kernel.  
+
+## Alt. Coordinate System - Specification
 
 
 \begin{align*}
@@ -152,9 +162,7 @@ covariates are (1) Species, (2) Longitude, and (3) Size of Nearest Water Body
     \phi &\sim \text{Unif}(1.5, 15) \\
     \sigma^2 &\sim \text{IG}(2, 24.44^2) \\
     \tau^2 &\sim \text{IG}(2, 0.1 \cdot 24.44^2) \\
-    
     W &\sim MVN(0, C_{\theta}(\cdot, \cdot))\\
-    
     Y &\sim MVN(X\beta + W, \tau^2I_n)
 \end{align*}
 
