@@ -91,7 +91,7 @@ csl: diabetologia.csl
     - Tri-colored Bat (PERSUB)
 - These species range across all of our stations
 
-## Specification
+## Three-Species Model - Specification
 
 Let $C_\theta$ represent the standard exponential kernel. We use a simple model to start,
 with the distance function decided completely by latitude and longitude. Our
@@ -110,28 +110,77 @@ covariates are (1) Species and (2) Distance to Water
 \end{align*}
 
 
-# Fitting
+# Three-Species Model - Fitting
 
 ##
 
 ![](./images/three_species_model/traceplots.png){fig-align="center"}
 
 
-## Performance
+## Three-Species Model - Performance
 
 - Variogram of residuals still has some remaining spatial variation
 - Confirmed by Moran's I-test (0.39, $p \approx 0$).
 
 ![](./images/three_species_model/residual_variogram.png){fig-align="center"}
 
-## Residual Distribution
+## Three-Species Model - Residual Distribution
 
 ![](./images/three_species_model/residual_densities.png)
 
 
-## Spatial Effects
+## Three-Species Model - Spatial Effects
 
 ![](./images/three_species_model/estimated_spatial_effects.png)
+
+## Alt. Coordinate System
+
+- Distance to water important for stable food source for bats
+- Alternatively, use (latitude, distance to water) as spatial coordinates
+- Normalize latitude and distance to water using z-score standardization to ensure similar scaling
+- Fit on all species
+
+## Alt. Coordinate System - Specification
+
+Let $C_\theta$ represent the standard exponential kernel. We use a simple model to start,
+with the distance function decided completely by latitude and distance to water (normalized) Our
+covariates are (1) Species, (2) Longitude, and (3) Size of Nearest Water Body
+
+
+\begin{align*}
+    \beta &\sim N(0, I_n) \\
+    \phi &\sim \text{Unif}(1.5, 15) \\
+    \sigma^2 &\sim \text{IG}(2, 24.44^2) \\
+    \tau^2 &\sim \text{IG}(2, 0.1 \cdot 24.44^2) \\
+    
+    W &\sim MVN(0, C_{\theta}(\cdot, \cdot))\\
+    
+    Y &\sim MVN(X\beta + W, \tau^2I_n)
+\end{align*}
+
+
+# Alt. Coordinate System - Fitting
+
+##
+
+![](./images/sam_yizhou_model/sam_yizhou_model_trace_plots.png){fig-align="center"}
+
+
+## Alt. Coordinate System - Performance
+
+- Variogram of residuals has some limited remaining spatial variation
+- Confirmed by Moran's I-test (0.17, $p \approx 0$).
+
+![](./images/sam_yizhou_model/sam_yizhou_residual_variogram.png){fig-align="center"}
+
+## Alt. Coordinate System - Residual Distribution
+
+![](./images/sam_yizhou_model/sam_yizhou_residual_densities.png)
+
+## Alt. Coordinate System - Spatial Effects
+
+![](./images/sam_yizhou_model/sam_yizhou_estimated_spatial_effects.png)
+
 
 ## Potential New Covariates
 
