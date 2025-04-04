@@ -148,3 +148,43 @@ effectiveSize(as.mcmc(spatial_lm_fit$p.theta.recover.samples))
 # Check model diagnostics
 spDiag(spatial_lm_fit, start=round(n.samples/3), verbose=TRUE)
 ```
+
+```{r}
+plot(spatial_lm_fit$p.beta.recover.samples[, "Long_norm"])
+
+plot(spatial_lm_fit$p.beta.recover.samples[, "SpeciesPERSUB"])
+
+plot(spatial_lm_fit$p.w.recover.samples[100, ], type="l", main="Spatial Effect Sample Path") # Plot the spatial effect for the first site
+
+spatial_lm_fit$p.theta.recover.samples
+```
+
+```{r}
+posterior_preds <- spatial_lm_fit$p.beta.recover.samples %*% t(spatial_lm_fit$X)  # All posterior predictions
+posterior_var <- apply(posterior_preds, 2, var)  # Variance of residuals
+posterior_mean <- apply(posterior_preds, 2, mean)  # Variance of residuals
+
+
+residual_plot_data <- cbind.data.frame(
+    'var'=posterior_var,
+    'mean'=posterior_mean,
+    'true'=spatial_lm_fit$Y,
+    'lat'=coords[, 1],
+    'long'=coords[, 2],
+    'species'=model_df$Species,
+    'resid' = samples$Y - posterior_mean
+)
+residual_plot_data <- residual_plot_data[order(residual_plot_data$mean),]
+residual_plot_data$idx <- seq(1, nrow(residual_plot_data))
+
+
+plot(
+    variog(data=residual_plot_data$resid, coords = cbind(residual_plot_data$lat, residual_plot_data$long), uvec=10),
+    main="Residual Variogram"
+)
+
+library(spdep)
+nb <- knn2nb(knearneigh(coords, k = 4))  # Define neighbors
+listw <- nb2listw(nb, style = "W")  # Create spatial weights
+moran.test(residual_plot_data$resid, listw)  # Run Moran's I test
+```
