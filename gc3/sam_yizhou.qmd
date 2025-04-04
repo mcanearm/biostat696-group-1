@@ -130,12 +130,13 @@ spatial_lm_fit <- spatial_lm %>% spRecover(start=round(n.samples/3), verbose=TRU
 ```{r}
 ## Check for MCMC convergence
 # Check trace plots
-par(mfrow=c(3,2))
+par(mfrow=c(2,2))
+#par(mfrow=c(3,2))
 ts.plot(spatial_lm_fit$p.beta.recover.samples[,1], main = "beta", ylab = "")
 ts.plot(spatial_lm_fit$p.theta.recover.samples[,1], main = "sigma^2", ylab = "")
 ts.plot(spatial_lm_fit$p.theta.recover.samples[,2], main = "tau^2", ylab = "")
 ts.plot(spatial_lm_fit$p.theta.recover.samples[,3], main = "phi", ylab = "")
-ts.plot(spatial_lm_fit$p.w.recover.samples[,4], main = "beta[1]", ylab = "")
+#ts.plot(spatial_lm_fit$p.w.recover.samples[,4], main = "beta[1]", ylab = "")
 
 # Check ACF plots 
 autocorr.plot(as.mcmc(spatial_lm_fit$p.theta.recover.samples))
