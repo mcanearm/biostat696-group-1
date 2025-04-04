@@ -106,17 +106,15 @@ colnames(df)
 ```{r}
 
 model_df <- model_df |> dplyr::filter(Species %in% c("EPTFUS", "LASNOC", "PERSUB")) |> 
-    dplyr::mutate(Species = factor(Species)) |> 
-    dplyr::mutate(across(c(Lat, Long, dist_to_water, water_size), scale)) |> 
-    dplyr::mutate(across(c(count, avg_count), log1p))
+    dplyr::mutate(Species = factor(Species))
+    # dplyr::mutate(across(c(Lat, Long, dist_to_water, water_size), scale)) |> 
+    # dplyr::mutate(across(c(count, avg_count), log1p))
 coords <- as.matrix(model_df[, c("Lat", "Long")])
 coords <- coords + rnorm(nrow(coords) * 2, mean = 0, sd = 0.01) # add a little noise to avoid singularity in the covariance matrix
-scaled_covars <- model_df[, c("dist_to_water")]
 covars <- cbind.data.frame(
     "count"=model_df$count,
     "avg_count"=model_df$count/model_df$num_nights,
-    "dist_to_water"=scaled_covars, 
-    "log_h20_size"=log(model_df$water_size), 
+    "dist_to_water"=model_df$dist_to_water,
     "species"=model_df$Species
 )
 covars
@@ -177,17 +175,15 @@ spatial_lm <- spBayes::spLM(
 samples <- spRecover(spatial_lm, start = 10000)
 ```
 
-```{r}
-plot(samples$p.theta.samples[, "phi"], type="l")
+```{r, fig.width=8, fig.height=6}
+plot(samples$p.theta.recover.samples)
 
 # plot(samples$p.beta.recover.samples[, "dist_to_water"])
-plot(samples$p.beta.recover.samples[, "dist_to_water"])
+# plot(samples$p.beta.recover.samples[, c("dist_to_water", "speciesPERSUB", "speciesLASNOC")])
 
-plot(samples$p.beta.recover.samples[, "speciesPERSUB"])
+# plot(samples$p.beta.recover.samples[, "speciesPERSUB"])
 
-plot(samples$p.w.recover.samples[100, ], type="l", main="Spatial Effect Sample Path") # Plot the spatial effect for the first site
-
-samples$p.theta.recover.samples
+# plot(samples$p.w.recover.samples[700, ], type="l", main="Spatial Effect Sample Path") # Plot the spatial effect for the first site
 ```
 
 
@@ -195,7 +191,77 @@ samples$p.theta.recover.samples
 spDiag(samples)
 ```
 
+```{r}
+# Get posterior predictive mean
+posterior_preds <- samples$p.beta.recover.samples %*% t(samples$X)  # All posterior predictions
+posterior_var <- apply(posterior_preds, 2, var)  # Variance of residuals
+posterior_mean <- apply(posterior_preds, 2, mean)  # Variance of residuals
+
+
+residual_plot_data <- cbind.data.frame(
+    'var'=posterior_var,
+    'mean'=posterior_mean,
+    'true'=samples$Y,
+    'lat'=coords[, 1],
+    'long'=coords[, 2],
+    'species'=model_df$Species,
+    'resid' = samples$Y - posterior_mean,
+    'spatial_effect' = apply(samples$p.w.recover.samples, 1, mean)
+)
+residual_plot_data <- residual_plot_data[order(residual_plot_data$mean),]
+residual_plot_data$idx <- seq(1, nrow(residual_plot_data))
+
+
+plot(
+    variog(data=residual_plot_data$resid, coords = cbind(residual_plot_data$lat, residual_plot_data$long), uvec=10),
+    main="Residual Variogram"
+)
+
+
+```
 
 ```{r}
-sf::read_sf("../data/data/")
+library(spdep)
+nb <- knn2nb(knearneigh(coords, k = 4))  # Define neighbors
+listw <- nb2listw(nb, style = "W")  # Create spatial weights
+moran.test(residual_plot_data$resid, listw)  # Run Moran's I test
+```
+
+```{r}
+ggplot(data=residual_plot_data, aes(x=resid, fill=species)) + 
+    geom_density(alpha=0.5) + 
+    scale_fill_viridis_d() +
+    labs(
+        title="Residual Density by Species",
+        x="Residuals",
+        y="Density"
+    ) 
+```
+
+
+```{r}
+
+ggplot(data=residual_plot_data, aes(x=mean, y=resid)) + 
+    geom_point(size=2.0) +
+    theme_minimal() +
+    theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
+    geom_hline(yintercept=0, linetype="dashed") +
+    facet_wrap(.~species, ncol=1)
+    # guides(color = guide_colorbar(title="Residuals")) +
+    # geom_jitter(data=sightings_df, size = 1.5, aes(x = Long, y = Lat, color = log1p(count))) +
+    # coord_sf(ylim = c(25, 49), xlim = c(-75, -107)) +
+    # scale_color_viridis_c(name = "Log Counts", option = "B") +
+    # ggtitle("Residuals by Species")
+```
+
+```{r}
+ggplot(data=residual_plot_data) +
+    geom_sf(data = michiganplus) + 
+    # facet_wrap(~ Species, ncol=3) + 
+    geom_tile(aes(x=long, y=lat, fill=spatial_effect), width=0.25, height=0.25) +
+    theme_minimal() +
+    theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
+    coord_sf(ylim = c(40, 49), xlim = c(-75, -100)) +
+    # scale_color_viridis_c(name = "Log Counts", option = "B") +
+    ggtitle("Estimated Spatial Effects")
 ```
