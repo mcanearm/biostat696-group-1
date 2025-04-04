@@ -21,12 +21,14 @@ csl: diabetologia.csl
 - Bat populations face threats from habitat loss, climate change, and white nose-syndrom [@noauthor_white-nose_nodate]
 
 
-## Dataset
-
-@noauthor_usfws_2019
+## Dataset - USFWS Great Lakes and Upper Midwest Acoustic Acoustic Bat Dataset [@noauthor_usfws_2019]
 
 - Nightly counts from acoustic monitoring stations in upper Midwest (and Texas, Iowa, and Pennsylvania)
 - 14 Eligible species of bats
+
+![Example acoustic monitoring station at Fort Union Trading Post National Historic Site, South Dakota.](./images/bat_station.jpg)
+
+
 
 ## Species
 - EPTFUS: big brown bat (Eptesicus fuscus)
@@ -46,30 +48,57 @@ csl: diabetologia.csl
 - CORRAF: Rafinesque's big-eared bat (Corynorhinus rafinesquii) 
 - LASINT: northern yellow bat (Lasiurus intermedius) 
 
-## 
 
-![Example acoustic monitoring station at Fort Union Trading Post National Historic Site, South Dakota.](./images/bat_station.jpg)
+## 
+![Log Detections across Stations for 3 Species](./images/bat_sightings.png)
+
+
+## Lat/Long Variograms
+![Covariograms by species](./images/lat_long_variograms.png)
+
 
 ## Data Processing 
 
 - First, find closest bodies of water from all bodies of water via two sources: @noauthor_north_nodate @noauthor_usa_nodate
 - For each year and species, sum detections
 - ~3,300 total_records, several replicates across years at each of 273 stations
+- Reduce the total number of records if summarizing across years
 
-
-
-## Covariograms by Species
+## 
+![All water bodies shapefile](./images/water.png){fig-align="center" width="100%"}
 
 
 ## Interactive Map
-
 [Map of stations and corresponding water bodies](https://mcanearm.github.io/bat_counts.html)
 
 
 
-## Bat Stations
+## Model Specification
 
-![](./images/bat_sightings.png){fig-align="center" width="100%"}
+<!-- priors <- list( -->
+<!--     "beta.Norm" = list(rep(0, 4), diag(2, 4)),  # Less strict on betas -->
+<!--     "phi.Unif" = c(0.1, 25),   # Avoid extreme spatial correlation -->
+<!--     "nu.Unif" = c(0.5, 2.5), -->
+<!--     "sigma.sq.IG" = c(2, 1),  # More reasonable inverse gamma -->
+<!--     "tau.sq.IG" = c(2, 1) -->
+<!-- ) -->
+
+Let $C_\theta$ represent the standard exponential kernel. We use a simple model to start,
+with the distance function decided completely by latitude and longitude\footnote{}.
+
+
+$$
+\beta \sim \mathcal{N}(0, 4I_n) \\
+\phi \sim \text{Unif}(0.1, 25) \\
+\sigma^2 \sim \text{IG}(2, 1) \\
+\tau^2 \sim \text{IG}(2, 1) \\
+
+W \sim \mathcal{N}(0, C_{\theta}(\cdot, \cdot)), \text{where } C_{\theta}\\
+
+Y \sim \mathcal{N}(X\beta + W, \tau^2I_n)
+$$
+
+
 
 
 
