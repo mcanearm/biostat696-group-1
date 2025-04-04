@@ -97,7 +97,7 @@ df2 %>%
 For now, just try to fit a model using the species with the most detections. Also, put the coordinates and predictors on the same scale.
 ```{r}
 model_df <- df2 %>%
-    filter(Species == "MYOLUC") %>%
+    # filter(Species == "MYOLUC") %>%
     mutate(
         Lat = as.vector(scale(Lat)),
         Long = as.vector(scale(Long)),
@@ -117,7 +117,7 @@ model_df %>%
 First fit a non-spatial Poisson model to the counts.
 ```{r}
 poisson_mod <- glm(
-    count ~ Long + water_size,
+    count ~ Long + water_size + Species,
     poisson,
     model_df,
     offset = log(model_df$num_nights)
@@ -128,24 +128,24 @@ poisson_mod_fitted_vals <- unname(fitted(poisson_mod))
 ```
 
 ```{r}
-poisson_mod_lin_preds <- model_df %>%
-    select(Long, water_size) %>%
-    as.matrix() %>%
-    cbind(1, .) %>%
-    `%*%`(poisson_mod_coefs) %>%
-    drop()
+# poisson_mod_lin_preds <- model_df %>%
+#     select(Long, water_size) %>%
+#     as.matrix() %>%
+#     cbind(1, .) %>%
+#     `%*%`(poisson_mod_coefs) %>%
+#     drop()
 ```
 
 ```{r}
-near(
-    poisson_mod_fitted_vals, model_df$num_nights * exp(poisson_mod_lin_preds)
-) %>%
-    all()
+# near(
+#     poisson_mod_fitted_vals, model_df$num_nights * exp(poisson_mod_lin_preds)
+# ) %>%
+#     all()
 ```
 
 
 ```{r}
-spatial_rand_eff_hats <- log(model_df$count / poisson_mod_fitted_vals)
+# spatial_rand_eff_hats <- log(model_df$count / poisson_mod_fitted_vals)
 ```
 
 ```{r}
@@ -171,7 +171,7 @@ spatial_rand_eff_hats <- log(model_df$count / poisson_mod_fitted_vals)
 Fit an LRGP with 100 knots.
 ```{r}
 spatial_poisson_mod <- spGLM(
-    count ~ Long + water_size,
+    count ~ Long + water_size + Species,
     family = "poisson",
     weights = model_df$num_nights,
     data = model_df,
