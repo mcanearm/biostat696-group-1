@@ -1,0 +1,373 @@
+---
+title: "Victor's GC3 Work"
+format: html
+---
+
+```{r}
+library(geoR)
+library(dplyr)
+library(conflicted)
+library(here)
+library(tidyverse)
+library(scico)
+library(sf)
+library(rnaturalearth)
+library(geoR)
+library(spBayes)
+library(coda)
+library(ggspatial)
+library(dplyr)
+library(xtable)
+
+conflicts_prefer(dplyr::filter, dplyr::select)
+
+great_lakes_states <- ne_states(
+    country = "United States of America", returnclass = "sf"
+) %>%
+    filter(
+        name %in% c(
+            "Minnesota", "Wisconsin", "Illinois", "Indiana", "Michigan", "Ohio",
+            "Pennsylvania", "New York"
+        )
+    )
+ontario <- ne_states(country = "Canada", returnclass = "sf") %>%
+    filter(name == "Ontario")
+great_lakes <- ne_download(
+    scale = 50, type = "lakes", category = "physical", returnclass = "sf"
+) %>%
+    filter(
+        name %in% c(
+            "Lake Superior", "Lake Michigan", "Lake Huron", "Lake Erie",
+            "Lake Ontario"
+        )
+    )
+
+df <- read.csv("../data/model_data.csv")
+```
+
+There is exactly one record for each pair of `AcousticSite` and `Year`.
+```{r}
+df %>%
+    count(AcousticSite, Year, name = "num_recs") %>%
+    filter(num_recs > 1)
+```
+
+One idea was to use, at each site, records for different years as replicates. Starting values for the covariance function parameters could then be computed using sample correlations between sites. The output below shows that this approach isn't viable. At most sites, there is a record for just one year, and no site has more than three years' worth of data.
+```{r}
+df %>%
+    group_by(AcousticSite) %>%
+    summarize(num_years = n_distinct(Year)) %>%
+    count(num_years, name = "num_sites")
+```
+
+For each site, for each species, sum detections across years.
+```{r}
+df2 <- df %>%
+    select(!c(ALL, num_detectable_species)) %>%
+    group_by(AcousticSite) %>%
+    summarize(
+        across(c(ends_with("_count"), num_nights), sum),
+        Lat = Lat[1],
+        Long = Long[1],
+        dist_to_water = dist_to_water[1],
+        water_size = water_size[1]
+    ) %>%
+    pivot_longer(
+        ends_with("_count"), names_to = "Species", values_to = "count"
+    ) %>%
+    mutate(Species = str_remove(Species, fixed("_count")))
+```
+
+A few species have at least 100 observations.
+```{r}
+(
+    species_obs_counts <- df2 %>%
+        filter(count > 0) %>%
+        count(Species, sort = TRUE, name = "num_obs")
+)
+```
+
+For each species with at least 100 observations, the count distribution is strongly right-skewed. Some of the counts are very large, like the largest counts for `MYOLUC`. This makes me wary of fitting a spatial Poisson model. The only permissible values of the `family` argument of `spGLM()` are `"binomial"` and `"poisson"` - there's no `"quasipoisson"` option like there is for `glm()`. So, it doesn't seem to be possible to fit a spatial Poisson model with overdispersion using `spGLM()`.
+```{r}
+df2 %>%
+    filter(Species %in% filter(species_obs_counts, num_obs >= 100)$Species) %>%
+    ggplot(aes(count)) +
+    facet_wrap(vars(Species), scales = "free_x") +
+    geom_histogram(bins = 20) +
+    theme_bw()
+```
+
+Based on the histograms below, I wonder if using `Lat` and `dist_to_water` as the coordinates is non-ideal given that for each coordinate, there is a concentration around one particular value (`45` in the case of `Lat` and `0` in the case of `dist_to_water`). If most sites have roughly the same coordinates, then most values in the spatial random effects covariance matrix are going to be roughly the same. Does this imply that the covariance matrix is close to singular?
+```{r}
+df2 %>%
+    distinct(Lat, Long, dist_to_water) %>%
+    pivot_longer(everything(), names_to = "coord", values_to = "val") %>%
+    ggplot(aes(val)) +
+    facet_wrap(vars(coord), scales = "free_x") +
+    geom_histogram(bins = 20) +
+    theme_bw()
+```
+
+Count detections by species.
+```{r}
+df2 %>%
+    group_by(Species) %>%
+    summarize(count = sum(count)) %>%
+    arrange(desc(count))
+```
+
+We'll fit a model using data on the species whose empirical semivariograms appear reasonable according to Matt. Also, we put the coordinates and the non-`Species` predictors on the same scale.
+```{r}
+model_df <- df2 %>%
+    filter(Species %in% c("EPTFUS", "LASNOC", "PERSUB")) %>%
+    mutate(
+        Lat_scaled = as.vector(scale(Lat)),
+        Long_scaled = as.vector(scale(Long)),
+        dist_to_water_scaled = as.vector(scale(dist_to_water)),
+        water_size_scaled = as.vector(scale(water_size))
+    )
+```
+
+The sites aren't on a grid.
+```{r}
+model_df %>%
+    ggplot(aes(dist_to_water, Lat)) +
+    geom_point(alpha = 0.3) +
+    theme_bw()
+```
+
+First fit a non-spatial Poisson model to the counts.
+```{r}
+poisson_mod <- glm(
+    count ~ Long + water_size + Species,
+    poisson,
+    model_df,
+    offset = log(model_df$num_nights)
+)
+poisson_mod_coefs <- coef(poisson_mod)
+poisson_mod_resid_var <- var(resid(poisson_mod))
+poisson_mod_fitted_vals <- unname(fitted(poisson_mod))
+```
+
+```{r}
+# poisson_mod_lin_preds <- model_df %>%
+#     select(Long, water_size) %>%
+#     as.matrix() %>%
+#     cbind(1, .) %>%
+#     `%*%`(poisson_mod_coefs) %>%
+#     drop()
+```
+
+```{r}
+# near(
+#     poisson_mod_fitted_vals, model_df$num_nights * exp(poisson_mod_lin_preds)
+# ) %>%
+#     all()
+```
+
+
+```{r}
+# spatial_rand_eff_hats <- log(model_df$count / poisson_mod_fitted_vals)
+```
+
+```{r}
+# model_df_sites <- model_df %>%
+#     select(AcousticSite, Lat, dist_to_water) %>%
+#     unique()
+```
+
+```{r}
+# model_df_dists <- model_df_sites %>%
+#     `rownames<-`(.$AcousticSite) %>%
+#     select(!AcousticSite) %>%
+#     dist()
+```
+
+```{r}
+# model_df_dists %>%
+#     as.matrix() %>%
+#     as_tibble(rownames = "AcousticSite1") %>%
+#     pivot_longer(!AcousticSite1, names_to = "AcousticSite2", values_to = "dist")
+```
+
+Fit an LRGP with 100 knots.
+```{r}
+spatial_poisson_mod <- spGLM(
+    count ~ Long_scaled + water_size_scaled + Species,
+    family = "poisson",
+    weights = model_df$num_nights,
+    data = model_df,
+    coords = as.matrix(model_df[, c("Lat_scaled", "dist_to_water_scaled")]),
+    knots = c(10, 10),
+    starting = list(
+        beta = poisson_mod_coefs,
+        sigma.sq = poisson_mod_resid_var,
+        phi = 0.5,
+        w = 0
+    ),
+    priors = list(
+        sigma.sq.ig = c(poisson_mod_resid_var, 3 * poisson_mod_resid_var),
+        phi.unif = c(0.1, 10),
+        beta.normal = list(poisson_mod_coefs, sqrt(diag(vcov(poisson_mod))))
+    ),
+    cov.model = "exponential",
+    amcmc = list(n.batch = 500, batch.length = 50, accept.rate = 0.25),
+    verbose = TRUE,
+    n.report = 10
+)
+```
+
+Visualize the knots.
+```{r}
+spatial_poisson_mod %>%
+    `$`("knot.coords") %>%
+    as_tibble() %>%
+    set_names(c("Lat", "dist_to_water")) %>%
+    ggplot(aes(dist_to_water, Lat)) +
+    geom_point() +
+    theme_bw()
+```
+
+The chains all converged.
+```{r}
+chain_plot <- spatial_poisson_mod %>%
+    `$`(p.beta.theta.samples) %>%
+    as_tibble() %>%
+    rename(Intercept = `(Intercept)`) %>%
+    mutate(iter = row_number()) %>%
+    slice_tail(n = 10000) %>%
+    pivot_longer(!iter, names_to = "param", values_to = "estimate") %>%
+    ggplot(aes(iter, estimate)) +
+    facet_wrap(vars(param), nrow = 2, scales = "free_y") +
+    geom_line() +
+    scale_x_continuous(n.breaks = 3) +
+    labs(x = "Iteration", y = "Estimate") +
+    theme_bw()
+ggsave(
+    "../presentation/images/victor/chain_plot.png"#,
+    # width = 4, height = 3, units = "in"
+)
+chain_plot
+```
+
+These were the acceptance rates in the final batch.
+```{r}
+spatial_poisson_mod$acceptance %>% t() %>% tail(n = 1)
+```
+
+We compute parameter and spatial random effect estimates by taking posterior means.
+```{r}
+beta_hats <- spatial_poisson_mod %>%
+    `$`("p.beta.theta.samples") %>%
+    tail(n = 10000) %>%
+    colMeans()
+w_hats <- spatial_poisson_mod$p.w.samples %>%
+    t() %>%
+    tail(n = 10000) %>%
+    colMeans()
+```
+
+A table with the $\beta$ estimates.
+```{r}
+beta_hats %>%
+    as.matrix() %>%
+    xtable(digits = 2)
+```
+
+
+We use the parameter and spatial random effect estimates to compute fitted values and residuals.
+```{r}
+fitted_vals <- spatial_poisson_mod %>%
+    `$`(X) %>%
+    `rownames<-`(NULL) %>%
+    `%*%`(beta_hats[colnames(.)]) %>%
+    drop() %>%
+    `+`(w_hats) %>%
+    exp() %>%
+    `*`(model_df$num_nights)
+resids <- spatial_poisson_mod %>%
+    `$`("Y") %>%
+    drop() %>%
+    unname() %>%
+    `-`(fitted_vals)
+model_df2 <- add_column(model_df, fitted_val = fitted_vals, resid = resids)
+```
+
+The empirical semivariogram of the residuals looks strange, both because it decreases as distance increases and because of some very large values at large distances.
+```{r}
+resid_variogram <- select(model_df, "Lat", "dist_to_water") %>%
+    add_column(resid = resids) %>%
+    as.geodata(coords.col = 1:2) %>%
+    jitterDupCoords(max = 1e-4) %>%
+    variog(uvec = 100, messages = FALSE)
+png("../presentation/images/victor/resid_variogram.png")
+resid_variogram %>%
+    plot(
+        type = "o",
+        main = "Empirical Semivariogram of Residuals",
+        xlab = "Distance", ylab = "Semivariance"
+    )
+dev.off()
+```
+
+```{r}
+i_max <- which.max(variogram$v)
+variogram$u[i_max]
+```
+
+```{r}
+make_resid_plot <- function(species) {
+    ggplot() +
+        geom_sf(data = great_lakes_states, color = "black", fill = "white") +
+        geom_sf(data = ontario, color = "black", fill = "white") +
+        geom_sf(data = great_lakes, color = "lightblue", fill = "lightblue") +
+        geom_point(
+            aes(Long, Lat, color = resid), filter(model_df2, Species == species)
+        ) +
+        scale_color_gradient(low = "blue", high = "red") +
+        coord_sf(xlim = c(-92, -76), ylim = c(41, 49)) +
+        labs(
+            x = "Longitude", y = "Latitude", color = "Residual", title = species
+        ) +
+        theme_minimal() +
+        theme(legend.position = "top", plot.title = element_text(hjust = 0.5))
+}
+```
+
+```{r}
+resid_plots <- model_df2 %>%
+    distinct(Species) %>%
+    mutate(resid_plot = map(Species, make_resid_plot))
+```
+
+For some reason this produces images with weird areas of darkness.
+```{r}
+with(
+    resid_plots,
+    walk2(
+        Species, resid_plot,
+        ~ ggsave(str_glue("../presentation/images/victor/{.x}.png"), .y)
+    )
+)
+```
+
+```{r}
+with(
+    resid_plots,
+    walk2(
+        Species, resid_plot,
+        ~ print(.y)
+    )
+)
+```
+
+For some reason this produces images with weird areas of darkness.
+```{r}
+for (i in seq_len(nrow(resid_plots))) {
+    ggsave(
+        str_glue("../presentation/images/victor/{resid_plots$Species[i]}.png"),
+        resid_plots$resid_plot[[i]]
+    )
+}
+```
+
