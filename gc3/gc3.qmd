@@ -6,6 +6,9 @@ format: html
 # Matt's QC3
 
 ```{r}
+
+here::i_am("gc3/gc3.qmd")
+
 library(geoR)
 library(dplyr)
 library(conflicted)
@@ -19,8 +22,10 @@ library(spBayes)
 library(coda)
 library(ggspatial)
 library(dplyr)
+library(here)
 
-df <- read.csv("../data/model_data.csv")
+
+df <- read.csv(here("./data/model_data.csv"))
 df
 ```
 
