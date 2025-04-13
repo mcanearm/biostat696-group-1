@@ -1,9 +1,9 @@
 ---
 title: "US Bat Counts"
-format: pdf
-    # revealjs:
-    #     theme: serif
-    #     embed-resources: true
+format:
+    revealjs:
+        theme: serif
+        embed-resources: true
     
 bibliography: references.bib
 author: 
@@ -16,11 +16,6 @@ csl: diabetologia.csl
 
 
 # Introduction
-
-## GC3 Info
-
-- We have a revealJS template that looks nicer for the presentation. These are the slides.
-- Source code and repo are located on [Github](https://github.com/mcanearm/biostat696-group-1)
 
 ## Why this dataset?
 
@@ -70,6 +65,18 @@ csl: diabetologia.csl
 ## Lat/Long Variograms
 ![](./images/lat_long_variograms.png)
 
+## Lat/Long Variograms
+
+- Three species with sensible lat/long variograms
+    - Big Brown Bat (EPTFUS)
+    - Silver-Haired Bat (LASNOC)
+    - Tri-colored Bat (PERSUB)
+- These species range across all of our stations
+
+## Alt. Coordinate System
+
+- Distance to water important for stable food source for bats
+- Instead of using (latitude, longitude) as spatial coordinates, use (latitude, distance to water)
 
 ## Data Processing 
 
@@ -87,15 +94,6 @@ csl: diabetologia.csl
 
 
 # Models
-
-
-## Three-Species Model
-
-- Three species with sensible lat/long variograms 
-    - Big Brown Bat (EPTFUS)
-    - Silver-Haired Bat (LASNOC)
-    - Tri-colored Bat (PERSUB)
-- These species range across all of our stations
 
 ## Three-Species Model - Specification
 
@@ -142,8 +140,7 @@ csl: diabetologia.csl
 
 ## Alt. Coordinate System
 
-- Distance to water important for stable food source for bats
-- Alternatively, use (latitude, distance to water) as spatial coordinates
+- Now use (latitude, distance to water) as spatial coordinates
 - Normalize latitude and distance to water using z-score standardization to ensure similar scaling
 - Fit on all species
 
