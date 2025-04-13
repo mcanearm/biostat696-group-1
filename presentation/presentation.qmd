@@ -57,13 +57,8 @@ csl: diabetologia.csl
 - How does distance to water affect these measurements?
 - Is it better to consider distance to water a covariate or a coordinate?
 
-## 
+## Visualizing Bat Sightings
 ![](./images/bat_sightings.png)
-
-
-## Lat/Long Variograms
-![](./images/lat_long_variograms.png)
-
 
 ## Data Processing 
 
@@ -75,44 +70,58 @@ csl: diabetologia.csl
 ## All Water Bodies
 ![](./images/water.png){fig-align="center" width="100%"}
 
-
 ## Interactive Map
 [Map of stations and corresponding water bodies](https://mcanearm.github.io/bat_counts.html)
 
 
 # Models
 
+## Lat/Long Variograms
+![](./images/lat_long_variograms.png)
 
-## Three-Species Model
-
-- Three species with sensible lat/long variograms 
+## Lat/Long Variogram Analysis
+- Variogram shows spatial dependence, but patterns vary greatly by species
+- Three species with sensible lat/long variograms (exhibiting negative spatial dependence)
     - Big Brown Bat (EPTFUS)
     - Silver-Haired Bat (LASNOC)
     - Tri-colored Bat (PERSUB)
 - These species range across all of our stations
 
-## Three-Species Model - Specification
+## Three-Species Linear Model - Specification
+- Fit a linear model (LM) with the following covariates:
+    - Latitude, Longitude
+    - Distance to and size of nearest water body
+    - Species
+    
+\begin{align*}
+  Y_i &\sim X_i^\top \beta + \epsilon_i \\ 
+  \epsilon_i &\sim N(0, \sigma^2)
+\end{align*}
+    
+## Three-Species Linear Model - Residuals
+![](./images/linear_model_residuals.png){fig-align="center"}
+    
+## Three-Species Spatial Linear Model
+- From the LM, we see spatial dependence remaining in residuals
+- Instead of using Lat/Long as covariates, what about spatial coordinates for a spatial LM?
 
-Let $C_\theta$ represent the standard exponential kernel. We use a simple model to start,
-with the distance function decided completely by latitude and longitude. Our
-covariates are (1) Species and (2) Distance to Water 
 
+## Three-Species Spatial Linear Model - Specification
+
+Our covariates are (1) Species, (2) Distance to Water.
+
+Let $C_\theta$ represent the standard exponential kernel.
 
 \begin{align*}
     \beta &\sim N(0, 4I_n) \\
     \phi &\sim \text{Unif}(0.1, 25) \\
     \sigma^2 &\sim \text{IG}(2, 1) \\
     \tau^2 &\sim \text{IG}(2, 1) \\
-    
     W &\sim MVN(0, C_{\theta}(\cdot, \cdot))\\
-    
     Y &\sim MVN(X\beta + W, \tau^2I_n)
 \end{align*}
 
-
-# Three-Species Model - Fitting
-
-##
+## Three-Species Model - Fitting
 
 ![](./images/three_species_model/traceplots.png){fig-align="center"}
 
@@ -138,30 +147,25 @@ covariates are (1) Species and (2) Distance to Water
 - Distance to water important for stable food source for bats
 - Alternatively, use (latitude, distance to water) as spatial coordinates
 - Normalize latitude and distance to water using z-score standardization to ensure similar scaling
-- Fit on all species
+- Fit on three selected species
 
 ## Alt. Coordinate System - Specification
 
-Let $C_\theta$ represent the standard exponential kernel. We use a simple model to start,
-with the distance function decided completely by latitude and distance to water (normalized) Our
-covariates are (1) Species, (2) Longitude, and (3) Size of Nearest Water Body
+Our covariates are (1) Species, (2) Longitude, (3) Size of Nearest Water Body.
 
+Let $C_\theta$ represent the standard exponential kernel.
 
 \begin{align*}
     \beta &\sim N(0, I_n) \\
     \phi &\sim \text{Unif}(1.5, 15) \\
-    \sigma^2 &\sim \text{IG}(2, 24.44^2) \\
-    \tau^2 &\sim \text{IG}(2, 0.1 \cdot 24.44^2) \\
-    
-    W &\sim MVN(0, C_{\theta}(\cdot, \cdot))\\
-    
+    \sigma^2 &\sim \text{IG}(2, 10.21^2) \\
+    \tau^2 &\sim \text{IG}(2, 0.1 \cdot 10.21^2) \\
+    W &\sim MVN(0, C_{\theta}(\cdot, \cdot)) \\
     Y &\sim MVN(X\beta + W, \tau^2I_n)
 \end{align*}
 
 
-# Alt. Coordinate System - Fitting
-
-##
+## Alt. Coordinate System - Fitting
 
 ![](./images/sam_yizhou_model/sam_yizhou_model_trace_plots.png){fig-align="center"}
 
