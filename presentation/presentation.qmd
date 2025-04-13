@@ -1,9 +1,9 @@
 ---
 title: "US Bat Counts"
-format: pdf
-    # revealjs:
-    #     theme: serif
-    #     embed-resources: true
+format:
+    revealjs:
+        theme: serif
+        embed-resources: true
     
 bibliography: references.bib
 author: 
