@@ -17,11 +17,6 @@ csl: diabetologia.csl
 
 # Introduction
 
-## GC3 Info
-
-- We have a revealJS template that looks nicer for the presentation. These are the slides.
-- Source code and repo are located on [Github](https://github.com/mcanearm/biostat696-group-1)
-
 ## Why this dataset?
 
 - Bats are an essential organism in North American ecosystems
