@@ -59,7 +59,7 @@ model_df
 
 ```{r}
 
-summary(lm(avg_count ~ Lat + Long + dist_to_water + water_size + Species, model_df))
+summary(lm(avg_count ~ Lat + Long + dist_to_water + Species, model_df))
 
 ```
 
@@ -110,10 +110,10 @@ colnames(df)
 
 ```{r}
 
+original_df <- model_df
 model_df <- model_df |> dplyr::filter(Species %in% c("EPTFUS", "LASNOC", "PERSUB")) |> 
-    dplyr::mutate(Species = factor(Species))
-    # dplyr::mutate(across(c(Lat, Long, dist_to_water, water_size), scale)) |> 
-    # dplyr::mutate(across(c(count, avg_count), log1p))
+    dplyr::mutate(Species = factor(Species)) |>
+    dplyr::mutate(across(c(dist_to_water, Lat, Long), scale)) 
 coords <- as.matrix(model_df[, c("Lat", "Long")])
 coords <- coords + rnorm(nrow(coords) * 2, mean = 0, sd = 0.01) # add a little noise to avoid singularity in the covariance matrix
 covars <- cbind.data.frame(
@@ -160,7 +160,7 @@ priors <- list(
 cov.model <- "exponential"
 
 spatial_lm <- spBayes::spLM(
-    formula = log(avg_count) ~ dist_to_water + species,
+    formula = log(avg_count) ~ 1 + dist_to_water + species,
     # family = "poisson",
     amcmc = list(n.batch = 500, batch.length = 25, accept.rate = 0.25),
     data = covars,
@@ -182,13 +182,10 @@ samples <- spRecover(spatial_lm, start = 10000)
 
 ```{r, fig.width=8, fig.height=6}
 plot(samples$p.theta.recover.samples)
+```
 
-# plot(samples$p.beta.recover.samples[, "dist_to_water"])
-# plot(samples$p.beta.recover.samples[, c("dist_to_water", "speciesPERSUB", "speciesLASNOC")])
-
-# plot(samples$p.beta.recover.samples[, "speciesPERSUB"])
-
-# plot(samples$p.w.recover.samples[700, ], type="l", main="Spatial Effect Sample Path") # Plot the spatial effect for the first site
+```{r}
+head(samples$p.beta.recover.samples)
 ```
 
 
@@ -245,28 +242,109 @@ ggplot(data=residual_plot_data, aes(x=resid, fill=species)) +
 
 
 ```{r}
+residual_plot_data$old_Lat <- model_df$Lat*attr(model_df$Lat, "scaled:scale") + attr(model_df$Lat, "scaled:center")
+residual_plot_data$old_Long <- model_df$Long*attr(model_df$Long, "scaled:scale") + attr(model_df$Long, "scaled:center")
 
-ggplot(data=residual_plot_data, aes(x=mean, y=resid)) + 
-    geom_point(size=2.0) +
-    theme_minimal() +
-    theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
-    geom_hline(yintercept=0, linetype="dashed") +
-    facet_wrap(.~species, ncol=1)
-    # guides(color = guide_colorbar(title="Residuals")) +
-    # geom_jitter(data=sightings_df, size = 1.5, aes(x = Long, y = Lat, color = log1p(count))) +
-    # coord_sf(ylim = c(25, 49), xlim = c(-75, -107)) +
-    # scale_color_viridis_c(name = "Log Counts", option = "B") +
-    # ggtitle("Residuals by Species")
-```
-
-```{r}
 ggplot(data=residual_plot_data) +
     geom_sf(data = michiganplus) + 
-    # facet_wrap(~ Species, ncol=3) + 
-    geom_tile(aes(x=long, y=lat, fill=spatial_effect), width=0.25, height=0.25) +
+    # facet_wrap(~ Species, ncol=3) +
+    geom_tile(aes(x=old_Long, y=old_Lat, fill=spatial_effect), width=0.25, height=0.25) +
     theme_minimal() +
-    theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
+    theme(legend.position = "right", axis.text.x=element_text(angle=45), axis.title = element_blank()) +
     coord_sf(ylim = c(40, 49), xlim = c(-75, -100)) +
-    # scale_color_viridis_c(name = "Log Counts", option = "B") +
+    scale_color_viridis_c(name = "Log Counts", option = "B") +
     ggtitle("Estimated Spatial Effects")
 ```
+
+
+```{r full_grid_effects_EPTFUS}
+full_grid <- read.csv("../data/data/prediction_grid.csv")
+
+water_center <- attr(model_df$dist_to_water, "scaled:center")
+water_scale <- attr(model_df$dist_to_water, "scaled:scale")
+
+# scale the full grid data
+full_grid$water_dist <- scale(
+    full_grid$water_dist, 
+    center = water_center, 
+    scale = water_scale
+)
+
+centers <- c(
+    attr(model_df[, "Lat"], "scaled:center"),
+    attr(model_df[, "Long"], "scaled:center"),
+    attr(model_df[, "dist_to_water"], "scaled:center")
+)
+
+scales <- c(
+    attr(model_df[, "Lat"], "scaled:scale"),
+    attr(model_df[, "Long"], "scaled:scale"),
+    attr(model_df[, "dist_to_water"], "scaled:scale")
+)
+
+
+scaled_grid <- scale(
+    full_grid[, c("lat", "lon", "water_dist")],
+    centers,
+    scales
+)
+
+pred.covars <- cbind('intercept' = 1, dist_to_water=scaled_grid[, "water_dist"], "LASNOC"=0, "PERSUB"=0)
+
+grid_predictions <- spPredict(
+    spatial_lm,
+    pred.covars = pred.covars,
+    pred.coords = scaled_grid[, c("lat", "lon")],
+    n.omp.threads = 8,
+    start = 10000
+)
+
+```
+
+
+```{r}
+y_preds = rowMeans(grid_predictions$p.y.predictive.samples)
+full_grid$predictions <- y_preds
+
+ggplot(data=full_grid) +
+    # geom_sf(data = michiganplus) + 
+    # facet_wrap(~ Species, ncol=3) + 
+    geom_tile(aes(x=lon, y=lat, fill=predictions), width=0.25, height=0.25) +
+    theme(legend.position = "right") +
+    coord_sf(ylim = c(25, 49), xlim = c(-70, -105)) +
+    scale_fill_viridis_c() +
+    ggtitle("Log Detections / Night")
+
+
+```
+
+
+```{r LANSOC}
+eptfus_pred.covars <- cbind('intercept' = 1, dist_to_water=scaled_grid[, "water_dist"], "LASNOC"=0, "PERSUB"=0)
+lansoc_pred.covars <- cbind('intercept' = 1, dist_to_water=scaled_grid[, "water_dist"], "LASNOC"=1, "PERSUB"=0)
+persub_pred.covars <- cbind('intercept' = 1, dist_to_water=scaled_grid[, "water_dist"], "LASNOC"=0, "PERSUB"=1)
+
+all_pred_covars <- rbind(eptfus_pred.covars, lansoc_pred.covars, persub_pred.covars)
+
+all_coords <- rbind(
+    scaled_gird[, c("lat", "lon")],
+    scaled_gird[, c("lat", "lon")],
+    scaled_gird[, c("lat", "lon")]
+)
+
+all_species <- c(
+    rep("EPTFUS", nrow(scaled_grid)),
+    rep("LASNOC", nrow(scaled_grid)),
+    rep("PERSUB", nrow(scaled_grid))
+)
+
+grid_predictions <- spPredict(
+    spatial_lm,
+    pred.covars = all_pred_covars,
+    pred.coords = all_coords,
+    n.omp.threads = 8,
+    start = 10000
+)
+```
+
+
