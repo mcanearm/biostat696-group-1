@@ -116,15 +116,14 @@ df2 %>%
     arrange(desc(count))
 ```
 
-We'll fit a model using data on the species whose empirical semivariograms appear reasonable according to Matt. Also, we put the coordinates and the non-`Species` predictors on the same scale.
+We'll fit a model using data on the species whose empirical semivariograms appear reasonable according to Matt. Also, we put the coordinate variables on the same scale. This will prevent one coordinate from dominating in distance computations for spatial models.
 ```{r}
 model_df <- df2 %>%
     filter(Species %in% c("EPTFUS", "LASNOC", "PERSUB")) %>%
     mutate(
         Lat_scaled = as.vector(scale(Lat)),
         Long_scaled = as.vector(scale(Long)),
-        dist_to_water_scaled = as.vector(scale(dist_to_water)),
-        water_size_scaled = as.vector(scale(water_size))
+        dist_to_water_scaled = as.vector(scale(dist_to_water))
     )
 ```
 
@@ -136,17 +135,32 @@ model_df %>%
     theme_bw()
 ```
 
-First fit a non-spatial Poisson model to the counts.
+# Models without Spatial Random Effects
+
+## Poisson Models with `dist_to_water_scaled` and `Species`
+
+First fit a non-spatial Poisson model with `dist_to_water_scaled` and `Species` as covariates.
 ```{r}
-poisson_mod <- glm(
-    count ~ Long + water_size + Species,
+poisson_mod1 <- glm(
+    count ~ dist_to_water_scaled + Species,
     poisson,
     model_df,
     offset = log(model_df$num_nights)
 )
-poisson_mod_coefs <- coef(poisson_mod)
-poisson_mod_resid_var <- var(resid(poisson_mod))
-poisson_mod_fitted_vals <- unname(fitted(poisson_mod))
+poisson_mod1_coefs <- coef(poisson_mod1)
+poisson_mod1_fitted_vals <- unname(fitted(poisson_mod1))
+poisson_mod1_resids <- unname(resid(poisson_mod1))
+poisson_mod1_resid_var <- var(resid(poisson_mod1))
+```
+
+Under the model, $\mathbb{E}(Y(s)) = \text{Var}(Y(s))$, or $\sqrt{\mathbb{E}(Y(s))} = \text{SD}(Y(s))$. We use the residuals to check whether this property of the model is reasonable. For the $i$th observation, which was recorded at location $s_i$, we compare $\sqrt{\widehat{\mathbb{E}}(Y(s_i))}$ to the absolute residual $|Y(s_i) - \widehat{Y}(s_i)|$; if the property is reasonable, then these two quantities should be similar. Below, we plot the absolute residual versus the square root of the fitted value. The two are equal along the dashed line. For some observations, the absolute residual is much larger than expected. However, this isn't true systematically, so those observations may just be outliers. The absolute residuals that aren't close to the line seem to be below it more often than above it, which suggests underdispersion.
+```{r}
+tibble(fitted_val = poisson_mod1_fitted_vals, resid = poisson_mod1_resids) %>%
+    ggplot(aes(sqrt(fitted_val), abs(resid))) +
+    geom_point(alpha = 0.3) +
+    geom_abline(linetype = "dashed", slope = 1, intercept = 0) +
+    labs(x = expression(sqrt("Fitted Value")), y = "Absolute Residual") +
+    theme_bw()
 ```
 
 ```{r}
@@ -165,6 +179,26 @@ poisson_mod_fitted_vals <- unname(fitted(poisson_mod))
 #     all()
 ```
 
+We next compute the empirical semivariogram of the residuals from the model. Since there are replicates for some sites, we need to jitter the coordinates to make things work. We use 100 bins to compute the empirical semivariogram.
+```{r}
+#| output: FALSE
+
+poisson_mod1_variogram <- model_df %>%
+    add_column(resid =  poisson_mod1_resids) %>%
+    select("Long", "Lat", "resid") %>%
+    as.geodata() %>%
+    jitterDupCoords(max = 1e-4) %>%
+    variog(uvec = 100, messages = FALSE)
+```
+If there is any spatial dependence, it only appears to be over small distances.
+```{r}
+poisson_mod1_variogram %>%
+    plot(
+        type = "o",
+        main = "Empirical Semivariogram of Residuals",
+        xlab = "Distance", ylab = "Semivariance"
+    )
+```
 
 ```{r}
 # spatial_rand_eff_hats <- log(model_df$count / poisson_mod_fitted_vals)
