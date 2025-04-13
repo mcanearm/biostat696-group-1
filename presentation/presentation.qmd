@@ -58,26 +58,6 @@ csl: diabetologia.csl
 - How does distance to water affect these measurements?
 - Is it better to consider distance to water a covariate or a coordinate?
 
-## 
-![](./images/bat_sightings.png)
-
-
-## Lat/Long Variograms
-![](./images/lat_long_variograms.png)
-
-## Lat/Long Variograms
-
-- Three species with sensible lat/long variograms
-    - Big Brown Bat (EPTFUS)
-    - Silver-Haired Bat (LASNOC)
-    - Tri-colored Bat (PERSUB)
-- These species range across all of our stations
-
-## Alt. Coordinate System
-
-- Distance to water important for stable food source for bats
-- Instead of using (latitude, longitude) as spatial coordinates, use (latitude, distance to water)
-
 ## Data Processing 
 
 - First, find closest bodies of water from all bodies of water via two sources: @noauthor_north_nodate @noauthor_usa_nodate
@@ -88,23 +68,50 @@ csl: diabetologia.csl
 ## All Water Bodies
 ![](./images/water.png){fig-align="center" width="100%"}
 
-
 ## Interactive Map
 [Map of stations and corresponding water bodies](https://mcanearm.github.io/bat_counts.html)
 
 
 # Models
 
-## Three-Species Model - Specification
+## Lat/Long Variograms
+![](./images/lat_long_variograms.png)
 
-- Coordinates are latitude and longitude, as expected
-- Covariates are: 
+## Lat/Long Variogram Analysis
+- Variogram shows spatial dependence, but patterns vary greatly by species
+- Three species with sensible lat/long variograms (exhibiting negative spatial dependence)
+    - Big Brown Bat (EPTFUS)
+    - Silver-Haired Bat (LASNOC)
+    - Tri-colored Bat (PERSUB)
+- These species range across all of our stations
+
+## Visualizing Bat Sightings
+![](./images/bat_sightings.png)
+
+## Non-Spatial Linear Model - Specification
+- Fit a linear model (LM) with the following covariates:
+    - Latitude, Longitude
+    - Distance to and size of nearest water body
     - Species
-    - Distance to water 
+    
+\begin{align*}
+    Y_i &\sim X_i^\top \beta + \epsilon_i \\ 
+    \epsilon_i &\sim N(0, \sigma^2)
+\end{align*}
+    
+## Non-Spatial Linear Model - Residuals
+![](./images/linear_model_residuals.png){fig-align="center"}
+    
+## Spatial Linear Model
+- From the LM, we see spatial dependence remaining in residuals
+- Instead of using Lat/Long as covariates, what about spatial coordinates for a spatial LM?
 
-- Let $C_\theta$ represent the standard exponential kernel. 
 
-## Model
+## Spatial Linear Model - Specification
+
+Our covariates are (1) Species, (2) Distance to Water.
+
+Let $C_\theta$ represent the standard exponential kernel.
 
 \begin{align*}
     \beta &\sim N(0, 4I_n) \\
@@ -115,26 +122,24 @@ csl: diabetologia.csl
     Y &\sim MVN(X\beta + W, \tau^2I_n)
 \end{align*}
 
-# Three-Species Model - Fitting
-
-##
+## Spatial Linear Model - Fitting
 
 ![](./images/three_species_model/traceplots.png){fig-align="center"}
 
 
-## Three-Species Model - Performance
+## Spatial Linear Model - Performance
 
 - Variogram of residuals still has some remaining spatial variation
 - Confirmed by Moran's I-test (0.39, $p \approx 0$).
 
 ![](./images/three_species_model/residual_variogram.png){fig-align="center"}
 
-## Three-Species Model - Residual Distribution
+## Spatial Linear Model - Residual Distribution
 
 ![](./images/three_species_model/residual_densities.png)
 
 
-## Three-Species Model - Spatial Effects
+## Spatial Linear Model - Spatial Effects
 
 ![](./images/three_species_model/estimated_spatial_effects.png)
 
@@ -142,31 +147,25 @@ csl: diabetologia.csl
 
 - Now use (latitude, distance to water) as spatial coordinates
 - Normalize latitude and distance to water using z-score standardization to ensure similar scaling
-- Fit on all species
+- Fit on three selected species
 
 ## Alt. Coordinate System - Specification
 
+Our covariates are (1) Species, (2) Longitude, (3) Size of Nearest Water Body.
 
-- We use a simple model to start, with the distance function decided completely by latitude and distance to water (normalized)
-- Our covariates are (1) Species, (2) Longitude, and (3) Size of Nearest Water Body
-- Let $C_\theta$ represent the standard exponential kernel.  
-
-## Alt. Coordinate System - Specification
-
+Let $C_\theta$ represent the standard exponential kernel.
 
 \begin{align*}
     \beta &\sim N(0, I_n) \\
-    \phi &\sim \text{Unif}(1.5, 15) \\
-    \sigma^2 &\sim \text{IG}(2, 24.44^2) \\
-    \tau^2 &\sim \text{IG}(2, 0.1 \cdot 24.44^2) \\
-    W &\sim MVN(0, C_{\theta}(\cdot, \cdot))\\
+    \phi &\sim \text{Unif}(0.005, 40) \\
+    \sigma^2 &\sim \text{IG}(2, 10.21^2) \\
+    \tau^2 &\sim \text{IG}(2, 0.1 \cdot 10.21^2) \\
+    W &\sim MVN(0, C_{\theta}(\cdot, \cdot)) \\
     Y &\sim MVN(X\beta + W, \tau^2I_n)
 \end{align*}
 
 
-# Alt. Coordinate System - Fitting
-
-##
+## Alt. Coordinate System - Fitting
 
 ![](./images/sam_yizhou_model/sam_yizhou_model_trace_plots.png){fig-align="center"}
 
