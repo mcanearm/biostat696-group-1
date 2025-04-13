@@ -184,6 +184,53 @@ poisson_mod1_variogram %>%
     )
 ```
 
+## Poisson Models with `Long_scaled` and `Species`
+
+Next fit a non-spatial Poisson model with `Long_scaled` and `Species` as covariates.
+```{r}
+poisson_mod2 <- glm(
+    count ~ Long_scaled + Species,
+    poisson,
+    model_df,
+    offset = log(model_df$num_nights)
+)
+poisson_mod2_coefs <- coef(poisson_mod2)
+poisson_mod2_fitted_vals <- unname(fitted(poisson_mod2))
+poisson_mod2_resids <- unname(resid(poisson_mod2))
+poisson_mod2_resid_var <- var(resid(poisson_mod2))
+```
+
+We plot the absolute residual versus the square root of the fitted value for the fitted model. Underdispersion is again suggested.
+```{r}
+tibble(fitted_val = poisson_mod2_fitted_vals, resid = poisson_mod2_resids) %>%
+    ggplot(aes(sqrt(fitted_val), abs(resid))) +
+    geom_point(alpha = 0.3) +
+    geom_abline(linetype = "dashed", slope = 1, intercept = 0) +
+    labs(x = expression(sqrt("Fitted Value")), y = "Absolute Residual") +
+    theme_bw()
+```
+
+We next compute the empirical semivariogram of the residuals from the model.
+```{r}
+#| output: FALSE
+
+poisson_mod2_variogram <- model_df %>%
+    add_column(resid =  poisson_mod2_resids) %>%
+    select("Long", "Lat", "resid") %>%
+    as.geodata() %>%
+    jitterDupCoords(max = 1e-4) %>%
+    variog(uvec = 100, messages = FALSE)
+```
+
+If there is any spatial dependence, it only appears to be over small distances.
+```{r}
+poisson_mod2_variogram %>%
+    plot(
+        type = "o",
+        main = "Empirical Semivariogram of Residuals",
+        xlab = "Distance", ylab = "Semivariance"
+    )
+```
 
 Fit an LRGP with 100 knots.
 ```{r}
