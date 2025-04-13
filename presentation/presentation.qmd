@@ -91,7 +91,7 @@ csl: diabetologia.csl
 ## Non-Spatial Linear Model - Specification
 - Fit a linear model (LM) with the following covariates:
     - Latitude, Longitude
-    - Distance to and size of nearest water body
+    - Distance to nearest water body
     - Species
     
 \begin{align*}
@@ -151,7 +151,7 @@ Let $C_\theta$ represent the standard exponential kernel.
 
 ## Alt. Coordinate System - Specification
 
-Our covariates are (1) Species, (2) Longitude, (3) Size of Nearest Water Body.
+Our covariates are (1) Species, (2) Longitude.
 
 Let $C_\theta$ represent the standard exponential kernel.
 
