@@ -217,6 +217,21 @@ Let $C_\theta$ represent the standard exponential kernel.
 
 # A Spatial Poisson Regression Model
 
+## Base Non-Spatial Poisson Model
+
+All spatial Poisson models were based on the non-spatial Poisson model
+
+$$
+Y_k \mid X_k = x_k \sim \text{Poisson}(n_k\exp(\beta_0 + x_k^{\top}\beta))
+$$
+
+where, for site-species pair $k$,
+
+- $Y_k$ is the number of detections
+- $n_k$ is the number of operational nights
+- $X_k$ is the covariate vector and $x_k$ is its observed value
+- $\beta_0$, $\beta$ contain parameters to be estimated
+
 ## Model Specification
 
 - We again used the alternative coordinate system and normalized the coordinates.
