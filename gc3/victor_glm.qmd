@@ -163,22 +163,6 @@ tibble(fitted_val = poisson_mod1_fitted_vals, resid = poisson_mod1_resids) %>%
     theme_bw()
 ```
 
-```{r}
-# poisson_mod_lin_preds <- model_df %>%
-#     select(Long, water_size) %>%
-#     as.matrix() %>%
-#     cbind(1, .) %>%
-#     `%*%`(poisson_mod_coefs) %>%
-#     drop()
-```
-
-```{r}
-# near(
-#     poisson_mod_fitted_vals, model_df$num_nights * exp(poisson_mod_lin_preds)
-# ) %>%
-#     all()
-```
-
 We next compute the empirical semivariogram of the residuals from the model. Since there are replicates for some sites, we need to jitter the coordinates to make things work. We use 100 bins to compute the empirical semivariogram.
 ```{r}
 #| output: FALSE
@@ -200,29 +184,6 @@ poisson_mod1_variogram %>%
     )
 ```
 
-```{r}
-# spatial_rand_eff_hats <- log(model_df$count / poisson_mod_fitted_vals)
-```
-
-```{r}
-# model_df_sites <- model_df %>%
-#     select(AcousticSite, Lat, dist_to_water) %>%
-#     unique()
-```
-
-```{r}
-# model_df_dists <- model_df_sites %>%
-#     `rownames<-`(.$AcousticSite) %>%
-#     select(!AcousticSite) %>%
-#     dist()
-```
-
-```{r}
-# model_df_dists %>%
-#     as.matrix() %>%
-#     as_tibble(rownames = "AcousticSite1") %>%
-#     pivot_longer(!AcousticSite1, names_to = "AcousticSite2", values_to = "dist")
-```
 
 Fit an LRGP with 100 knots.
 ```{r}
