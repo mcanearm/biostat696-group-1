@@ -95,7 +95,7 @@ csl: diabetologia.csl
     - Species
     
 \begin{align*}
-    Y_i &\sim X_i^\top \beta + \epsilon_i \\ 
+    Y_i &= X_i^\top \beta + \epsilon_i \\ 
     \epsilon_i &\sim N(0, \sigma^2)
 \end{align*}
     
@@ -114,12 +114,12 @@ Our covariates are (1) Species, (2) Distance to Water.
 Let $C_\theta$ represent the standard exponential kernel.
 
 \begin{align*}
-    \beta &\sim N(0, 4I_n) \\
     \phi &\sim \text{Unif}(0.1, 25) \\
     \sigma^2 &\sim \text{IG}(2, 1) \\
+    W \,|\, \phi, \sigma^2 &\sim MVN(0, C_{\theta}(\cdot, \cdot)) \\
+    \beta &\sim N(0, 4I_n) \\
     \tau^2 &\sim \text{IG}(2, 1) \\
-    W &\sim MVN(0, C_{\theta}(\cdot, \cdot))\\
-    Y &\sim MVN(X\beta + W, \tau^2I_n)
+    Y \,|\, \phi, \sigma^2, W, \beta, \tau^2 &\sim MVN(X\beta + W, \tau^2I_n)
 \end{align*}
 
 ## Spatial Linear Model - Fitting
@@ -156,12 +156,12 @@ Our covariates are (1) Species, (2) Longitude, (3) Size of Nearest Water Body.
 Let $C_\theta$ represent the standard exponential kernel.
 
 \begin{align*}
-    \beta &\sim N(0, I_n) \\
-    \phi &\sim \text{Unif}(0.005, 40) \\
+    \phi &\sim \text{Unif}(0.0005, 40) \\
     \sigma^2 &\sim \text{IG}(2, 10.21^2) \\
+    W \,|\, \phi, \sigma^2 &\sim MVN(0, C_{\theta}(\cdot, \cdot)) \\
+    \beta &\sim N(0, I_n) \\
     \tau^2 &\sim \text{IG}(2, 0.1 \cdot 10.21^2) \\
-    W &\sim MVN(0, C_{\theta}(\cdot, \cdot)) \\
-    Y &\sim MVN(X\beta + W, \tau^2I_n)
+    Y \,|\, \phi, \sigma^2, W, \beta, \tau^2 &\sim MVN(X\beta + W, \tau^2I_n)
 \end{align*}
 
 
@@ -173,7 +173,7 @@ Let $C_\theta$ represent the standard exponential kernel.
 ## Alt. Coordinate System - Performance
 
 - Variogram of residuals has some limited remaining spatial variation
-- Confirmed by Moran's I-test (0.17, $p \approx 0$).
+- Confirmed by Moran's I-test (0.10, $p \approx 0$).
 
 ![](./images/sam_yizhou_model/sam_yizhou_residual_variogram.png){fig-align="center"}
 
