@@ -220,8 +220,6 @@ Let $C_\theta$ represent the standard exponential kernel.
 ## Model Specification
 
 - We again used the alternative coordinate system and normalized the coordinates.
-- However, only the three species in the three-species model were used.
-    - MCMC chains didn't converge when all species were used.
 - Covariates:
     (1) Longitude (normalized)
     (2) Size of nearest water body (normalized)
