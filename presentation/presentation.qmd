@@ -1,9 +1,10 @@
 ---
 title: "US Bat Counts"
-format: 
+format:
     revealjs:
         theme: serif
         embed-resources: true
+    
 bibliography: references.bib
 author: 
     - Yizhou Gu
@@ -59,6 +60,23 @@ csl: diabetologia.csl
 
 ## Visualizing Bat Sightings
 ![](./images/bat_sightings.png)
+
+
+## Lat/Long Variograms
+![](./images/lat_long_variograms.png)
+
+## Lat/Long Variograms
+
+- Three species with sensible lat/long variograms
+    - Big Brown Bat (EPTFUS)
+    - Silver-Haired Bat (LASNOC)
+    - Tri-colored Bat (PERSUB)
+- These species range across all of our stations
+
+## Alt. Coordinate System
+
+- Distance to water important for stable food source for bats
+- Instead of using (latitude, longitude) as spatial coordinates, use (latitude, distance to water)
 
 ## Data Processing 
 
@@ -144,8 +162,7 @@ Let $C_\theta$ represent the standard exponential kernel.
 
 ## Alt. Coordinate System
 
-- Distance to water important for stable food source for bats
-- Alternatively, use (latitude, distance to water) as spatial coordinates
+- Now use (latitude, distance to water) as spatial coordinates
 - Normalize latitude and distance to water using z-score standardization to ensure similar scaling
 - Fit on three selected species
 
@@ -185,6 +202,72 @@ Let $C_\theta$ represent the standard exponential kernel.
 
 ![](./images/sam_yizhou_model/sam_yizhou_estimated_spatial_effects.png)
 
+# A Spatial Poisson Regression Model
+
+## Model Specification
+
+- We again used the alternative coordinate system and normalized the coordinates.
+- However, only the three species in the three-species model were used.
+    - MCMC chains didn't converge when all species were used.
+- Covariates:
+    (1) Longitude (normalized)
+    (2) Size of nearest water body (normalized)
+    (3) Species
+
+## Model Specification
+
+Under the model,
+
+$$
+Y_k \sim \text{Poisson}(n_k\exp(\beta_0 + x_k^{\top}\beta + w_k))
+$$
+
+where, for site-species pair $k$,
+
+- $Y_k$ is the number of detections
+- $n_k$ is the number of operational nights
+- $x_k$ is the covariate vector
+- $w_k$ is the spatial random effect
+
+## Model Specification
+
+- A Poisson GLM without spatial random effects was first fit.
+    - Let $\widehat{\beta}^{(0)}$ be the coefficient vector from the fitted model.
+    - Let $V$ be the covariance matrix of $\widehat{\beta}^{(0)}$.
+    - Let $\text{RSS}$ be the sum of squared residuals.
+
+## Model Specification
+
+Priors:
+\begin{align*}
+    \phi &\sim \text{Unif}(0.1, 10) \\
+    \sigma^2 &\sim \text{IG}(\text{RSS}, 3\cdot\text{RSS}) \\
+    \beta &\sim N(\widehat{\beta}^{(0)}, \sqrt{\text{diag}(V)}) \\
+\end{align*}
+
+## MCMC Chains
+
+![](./images/victor/chain_plot.png)
+
+## Empirical Semivariogram of the Residuals
+
+![](./images/victor/resid_variogram.png)
+
+## Residual Map for EPTFUS
+
+![](./images/victor/EPTFUS.png)
+
+
+## Residual Map for LASNOC
+
+![](./images/victor/LASNOC.png)
+
+
+## Residual Map for PERSUB
+
+![](./images/victor/PERSUB.png)
+
+# Future Work
 
 ## Potential New Covariates
 
