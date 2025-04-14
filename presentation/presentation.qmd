@@ -237,25 +237,25 @@ Priors:
 
 ## MCMC Chains
 
-<!-- ![](./images/victor/chain_plot.png) -->
+![](./images/victor/chain_plot.png)
 
 ## Empirical Semivariogram of the Residuals
 
-<!-- ![](./images/victor/resid_variogram.png) -->
+![](./images/victor/resid_variogram.png)
 
 ## Residual Map for EPTFUS
 
-<!-- ![](./images/victor/EPTFUS.png) -->
+![](./images/victor/EPTFUS.png)
 
 
 ## Residual Map for LASNOC
 
-<!-- ![](./images/victor/LASNOC.png) -->
+![](./images/victor/LASNOC.png)
 
 
 ## Residual Map for PERSUB
 
-<!-- ![](./images/victor/PERSUB.png) -->
+![](./images/victor/PERSUB.png)
 
 
 # Future Work
