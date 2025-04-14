@@ -188,9 +188,9 @@ plot(samples$p.theta.recover.samples)
 head(samples$p.beta.recover.samples)
 ```
 
-```{r}
-plot(samples$p.beta.recover.samples[, c(2:3)])
-
+```{r, fig.width=8, fig.height=6}
+par(mfrow=c(2, 2))
+plot(samples$p.beta.recover.samples[, c(1:4)], trace=TRUE, density=FALSE, auto.layout = FALSE)
 ```
 
 ```{r}
