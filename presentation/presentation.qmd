@@ -218,48 +218,96 @@ Let $C_\theta$ represent the standard exponential kernel.
 
 ![](./images/sam_yizhou_model/sam_yizhou_estimated_spatial_effects.png)
 
-# A Spatial Poisson Regression Model
+# Spatial Poisson Regression Models
 
 ## Model Specification
 
-- We again used the alternative coordinate system and normalized the coordinates.
-- However, only the three species in the three-species model were used.
-    - MCMC chains didn't converge when all species were used.
-- Covariates:
-    (1) Longitude (normalized)
-    (2) Size of nearest water body (normalized)
-    (3) Species
-
-## Model Specification
-
-Under the model,
+Every spatial Poisson model was of the form
 
 $$
-Y_k \sim \text{Poisson}(n_k\exp(\beta_0 + x_k^{\top}\beta + w_k))
+Y_i \mid X_i = x_i \sim \text{Poisson}(n_i\exp(x_i^{\top}\beta + w_i))
 $$
 
-where, for site-species pair $k$,
+where, for site $i$,
 
-- $Y_k$ is the number of detections
-- $n_k$ is the number of operational nights
-- $x_k$ is the covariate vector
-- $w_k$ is the spatial random effect
+- $Y_i$ is the number of detections
+- $n_i$ is the number of operational nights
+- $X_i$ is the covariate vector and $x_i$ is its observed value
+- $w_i$ is the spatial random effect
+- $\beta$ contain parameters to be estimated
 
-## Model Specification
+## Spatial Random Effects
 
-- A Poisson GLM without spatial random effects was first fit.
-    - Let $\widehat{\beta}^{(0)}$ be the coefficient vector from the fitted model.
-    - Let $V$ be the covariance matrix of $\widehat{\beta}^{(0)}$.
-    - Let $\text{RSS}$ be the sum of squared residuals.
+$w_i$ was given by an LRGP with
 
-## Model Specification
+- the exponential covariance function $\sigma^2 \exp(-\phi\|s_i - s_j\|)$.
+- $k$ knots
 
-Priors:
+We tried choosing knots by
+
+- setting $k = 49 = 7^2$ and $k = 100 = 10^2$
+- using knots on a grid and knots that were centroids of $k$-means clusters of sites
+
+## Priors
+
+Priors for $\sigma^2$ and $\beta$ were based on the corresponding non-spatial Poisson model
+
+$$
+Y_i \mid X_i = x_i \sim \text{Poisson}(n_i\exp(x_i^{\top}\beta))
+$$
+Let
+
+- $\widehat{\beta}^{(0)}$ be the coefficient vector from the fitted model
+- $V$ be the covariance matrix of $\widehat{\beta}^{(0)}$
+- $\text{RSS}$ be the sum of the squared residuals
+
+## Priors
+
+Below are the priors on $\phi$, $\sigma^2$, and $\beta$:
 \begin{align*}
     \phi &\sim \text{Unif}(0.1, 10) \\
-    \sigma^2 &\sim \text{IG}(\text{RSS}, 3\cdot\text{RSS}) \\
-    \beta &\sim N(\widehat{\beta}^{(0)}, \sqrt{\text{diag}(V)}) \\
+    \sigma^2 &\sim \text{IG}(\text{RSS}, 4\cdot\text{RSS}) \\
+    \beta &\sim N(\widehat{\beta}^{(0)}, 16 \cdot \text{diag}(V)) \\
 \end{align*}
+
+## Coordinate Systems and Covariates
+
+Two pairs of coordinate system and covariate vector were tried:
+
+1. Coordinates: latitude and longitude, covariates: distance to water, species
+2. Coordinates: latitude and distance to water, covariates: longitude, species
+
+For both pairs, latitude, longitude, and distance to water were standardized (centered and scaled)
+
+## Model Variants
+
+Eight model variants were fitted.
+
+- Two possible values for the number of knots $k$ (49, 100)
+- Two possible ways to choose the knots (grid, k-means centroids)
+- Two possible coordinate system-covariate vector pairs
+
+The fitted models were quite similar. On the next 2 slides,
+
+- Variants labeled "1" used latitude, longitude coordinates
+- Variants labeled "2" used latitude, distance to water coordinates
+
+## Residual Histograms
+
+![](./images/victor/resid_histograms.png)
+
+## Residual Boxplots
+
+![](./images/victor/resid_boxplots.png)
+
+## Example Plots for One Model Variant
+
+The next five slides show various visualizations of the MCMC chains and residuals for the model with
+
+- coordinates: latitude and longitude
+- covariates: distance to water, species
+- 49 knots
+- k-means centroids as knots
 
 ## MCMC Chains
 
@@ -268,6 +316,10 @@ Priors:
 ## Empirical Semivariogram of the Residuals
 
 ![](./images/victor/resid_variogram.png)
+
+## Residual Maps
+
+![](./images/victor/combined_resid_plot.png)
 
 ## Residual Map for EPTFUS
 

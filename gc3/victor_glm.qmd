@@ -116,15 +116,14 @@ df2 %>%
     arrange(desc(count))
 ```
 
-We'll fit a model using data on the species whose empirical semivariograms appear reasonable according to Matt. Also, we put the coordinates and the non-`Species` predictors on the same scale.
+We'll fit a model using data on the species whose empirical semivariograms appear reasonable according to Matt. Also, we put the coordinate variables on the same scale. This will prevent one coordinate from dominating in distance computations for spatial models.
 ```{r}
 model_df <- df2 %>%
     filter(Species %in% c("EPTFUS", "LASNOC", "PERSUB")) %>%
     mutate(
         Lat_scaled = as.vector(scale(Lat)),
         Long_scaled = as.vector(scale(Long)),
-        dist_to_water_scaled = as.vector(scale(dist_to_water)),
-        water_size_scaled = as.vector(scale(water_size))
+        dist_to_water_scaled = as.vector(scale(dist_to_water))
     )
 ```
 
@@ -136,79 +135,128 @@ model_df %>%
     theme_bw()
 ```
 
-First fit a non-spatial Poisson model to the counts.
+# Models without Spatial Random Effects
+
+## Poisson Models with `dist_to_water_scaled` and `Species`
+
+First fit a non-spatial Poisson model with `dist_to_water_scaled` and `Species` as covariates.
 ```{r}
-poisson_mod <- glm(
-    count ~ Long + water_size + Species,
+poisson_mod1 <- glm(
+    count ~ dist_to_water_scaled + Species,
     poisson,
     model_df,
     offset = log(model_df$num_nights)
 )
-poisson_mod_coefs <- coef(poisson_mod)
-poisson_mod_resid_var <- var(resid(poisson_mod))
-poisson_mod_fitted_vals <- unname(fitted(poisson_mod))
+poisson_mod1_coefs <- coef(poisson_mod1)
+poisson_mod1_fitted_vals <- unname(fitted(poisson_mod1))
+poisson_mod1_resids <- unname(resid(poisson_mod1))
+poisson_mod1_resid_var <- var(resid(poisson_mod1))
 ```
 
+Under the model, $\mathbb{E}(Y(s)) = \text{Var}(Y(s))$, or $\sqrt{\mathbb{E}(Y(s))} = \text{SD}(Y(s))$. We use the residuals to check whether this property of the model is reasonable. For the $i$th observation, which was recorded at location $s_i$, we compare $\sqrt{\widehat{\mathbb{E}}(Y(s_i))}$ to the absolute residual $|Y(s_i) - \widehat{Y}(s_i)|$; if the property is reasonable, then these two quantities should be similar. Below, we plot the absolute residual versus the square root of the fitted value. The two are equal along the dashed line. For some observations, the absolute residual is much larger than expected. However, this isn't true systematically, so those observations may just be outliers. The absolute residuals that aren't close to the line seem to be below it more often than above it, which suggests underdispersion.
 ```{r}
-# poisson_mod_lin_preds <- model_df %>%
-#     select(Long, water_size) %>%
-#     as.matrix() %>%
-#     cbind(1, .) %>%
-#     `%*%`(poisson_mod_coefs) %>%
-#     drop()
+tibble(fitted_val = poisson_mod1_fitted_vals, resid = poisson_mod1_resids) %>%
+    ggplot(aes(sqrt(fitted_val), abs(resid))) +
+    geom_point(alpha = 0.3) +
+    geom_abline(linetype = "dashed", slope = 1, intercept = 0) +
+    labs(x = expression(sqrt("Fitted Value")), y = "Absolute Residual") +
+    theme_bw()
 ```
 
+We next compute the empirical semivariogram of the residuals from the model. Since there are replicates for some sites, we need to jitter the coordinates to make things work. We use 100 bins to compute the empirical semivariogram.
 ```{r}
-# near(
-#     poisson_mod_fitted_vals, model_df$num_nights * exp(poisson_mod_lin_preds)
-# ) %>%
-#     all()
+#| output: FALSE
+
+poisson_mod1_variogram <- model_df %>%
+    add_column(resid =  poisson_mod1_resids) %>%
+    select("Long", "Lat", "resid") %>%
+    as.geodata() %>%
+    jitterDupCoords(max = 1e-4) %>%
+    variog(uvec = 100, messages = FALSE)
+```
+If there is any spatial dependence, it only appears to be over small distances.
+```{r}
+poisson_mod1_variogram %>%
+    plot(
+        type = "o",
+        main = "Empirical Semivariogram of Residuals",
+        xlab = "Distance", ylab = "Semivariance"
+    )
 ```
 
+## Poisson Models with `Long_scaled` and `Species`
 
+Next fit a non-spatial Poisson model with `Long_scaled` and `Species` as covariates.
 ```{r}
-# spatial_rand_eff_hats <- log(model_df$count / poisson_mod_fitted_vals)
+poisson_mod2 <- glm(
+    count ~ Long_scaled + Species,
+    poisson,
+    model_df,
+    offset = log(model_df$num_nights)
+)
+poisson_mod2_coefs <- coef(poisson_mod2)
+poisson_mod2_fitted_vals <- unname(fitted(poisson_mod2))
+poisson_mod2_resids <- unname(resid(poisson_mod2))
+poisson_mod2_resid_var <- var(resid(poisson_mod2))
 ```
 
+We plot the absolute residual versus the square root of the fitted value for the fitted model. Underdispersion is again suggested.
 ```{r}
-# model_df_sites <- model_df %>%
-#     select(AcousticSite, Lat, dist_to_water) %>%
-#     unique()
+tibble(fitted_val = poisson_mod2_fitted_vals, resid = poisson_mod2_resids) %>%
+    ggplot(aes(sqrt(fitted_val), abs(resid))) +
+    geom_point(alpha = 0.3) +
+    geom_abline(linetype = "dashed", slope = 1, intercept = 0) +
+    labs(x = expression(sqrt("Fitted Value")), y = "Absolute Residual") +
+    theme_bw()
 ```
 
+We next compute the empirical semivariogram of the residuals from the model.
 ```{r}
-# model_df_dists <- model_df_sites %>%
-#     `rownames<-`(.$AcousticSite) %>%
-#     select(!AcousticSite) %>%
-#     dist()
+#| output: FALSE
+
+poisson_mod2_variogram <- model_df %>%
+    add_column(resid =  poisson_mod2_resids) %>%
+    select("Long", "Lat", "resid") %>%
+    as.geodata() %>%
+    jitterDupCoords(max = 1e-4) %>%
+    variog(uvec = 100, messages = FALSE)
 ```
 
+If there is any spatial dependence, it only appears to be over small distances.
 ```{r}
-# model_df_dists %>%
-#     as.matrix() %>%
-#     as_tibble(rownames = "AcousticSite1") %>%
-#     pivot_longer(!AcousticSite1, names_to = "AcousticSite2", values_to = "dist")
+poisson_mod2_variogram %>%
+    plot(
+        type = "o",
+        main = "Empirical Semivariogram of Residuals",
+        xlab = "Distance", ylab = "Semivariance"
+    )
 ```
 
-Fit an LRGP with 100 knots.
+# Models with Spatial Random Effects
+
+## Poisson Models with `dist_to_water_scaled` and `Species`
+
+Fit a spatial Poisson model using `dist_to_water_scaled` and `Species` as predictors and an LRGP with 49 knots in a grid.
 ```{r}
-spatial_poisson_mod <- spGLM(
-    count ~ Long_scaled + water_size_scaled + Species,
+spatial_poisson_mod1_grid49 <- spGLM(
+    count ~ dist_to_water_scaled + Species,
     family = "poisson",
     weights = model_df$num_nights,
     data = model_df,
-    coords = as.matrix(model_df[, c("Lat_scaled", "dist_to_water_scaled")]),
-    knots = c(10, 10),
+    coords = as.matrix(model_df[, c("Lat_scaled", "Long_scaled")]),
+    knots = c(7, 7),
     starting = list(
-        beta = poisson_mod_coefs,
-        sigma.sq = poisson_mod_resid_var,
+        beta = poisson_mod1_coefs,
+        sigma.sq = poisson_mod1_resid_var,
         phi = 0.5,
         w = 0
     ),
     priors = list(
-        sigma.sq.ig = c(poisson_mod_resid_var, 3 * poisson_mod_resid_var),
+        sigma.sq.ig = c(poisson_mod1_resid_var, 4 * poisson_mod1_resid_var),
         phi.unif = c(0.1, 10),
-        beta.normal = list(poisson_mod_coefs, sqrt(diag(vcov(poisson_mod))))
+        beta.normal = list(
+            poisson_mod1_coefs, 4 * sqrt(diag(vcov(poisson_mod1)))
+        )
     ),
     cov.model = "exponential",
     amcmc = list(n.batch = 500, batch.length = 50, accept.rate = 0.25),
@@ -217,112 +265,523 @@ spatial_poisson_mod <- spGLM(
 )
 ```
 
-Visualize the knots.
+Fit a spatial Poisson model using `dist_to_water_scaled` and `Species` as predictors and an LRGP with 100 knots in a grid.
 ```{r}
-spatial_poisson_mod %>%
-    `$`("knot.coords") %>%
-    as_tibble() %>%
-    set_names(c("Lat", "dist_to_water")) %>%
-    ggplot(aes(dist_to_water, Lat)) +
-    geom_point() +
-    theme_bw()
-```
-
-The chains all converged.
-```{r}
-chain_plot <- spatial_poisson_mod %>%
-    `$`(p.beta.theta.samples) %>%
-    as_tibble() %>%
-    rename(Intercept = `(Intercept)`) %>%
-    mutate(iter = row_number()) %>%
-    slice_tail(n = 10000) %>%
-    pivot_longer(!iter, names_to = "param", values_to = "estimate") %>%
-    ggplot(aes(iter, estimate)) +
-    facet_wrap(vars(param), nrow = 2, scales = "free_y") +
-    geom_line() +
-    scale_x_continuous(n.breaks = 3) +
-    labs(x = "Iteration", y = "Estimate") +
-    theme_bw()
-ggsave(
-    "../presentation/images/victor/chain_plot.png"#,
-    # width = 4, height = 3, units = "in"
+spatial_poisson_mod1_grid100 <- spGLM(
+    count ~ dist_to_water_scaled + Species,
+    family = "poisson",
+    weights = model_df$num_nights,
+    data = model_df,
+    coords = as.matrix(model_df[, c("Lat_scaled", "Long_scaled")]),
+    knots = c(10, 10),
+    starting = list(
+        beta = poisson_mod1_coefs,
+        sigma.sq = poisson_mod1_resid_var,
+        phi = 0.5,
+        w = 0
+    ),
+    priors = list(
+        sigma.sq.ig = c(poisson_mod1_resid_var, 4 * poisson_mod1_resid_var),
+        phi.unif = c(0.1, 10),
+        beta.normal = list(
+            poisson_mod1_coefs, 4 * sqrt(diag(vcov(poisson_mod1)))
+        )
+    ),
+    cov.model = "exponential",
+    amcmc = list(n.batch = 500, batch.length = 50, accept.rate = 0.25),
+    verbose = TRUE,
+    n.report = 10
 )
-chain_plot
 ```
 
-These were the acceptance rates in the final batch.
+Fit a spatial Poisson model using `dist_to_water_scaled` and `Species` as predictors and an LRGP with 49 knots that are k-means cluster centroids.
 ```{r}
-spatial_poisson_mod$acceptance %>% t() %>% tail(n = 1)
+spatial_poisson_mod1_kmeans49 <- spGLM(
+    count ~ dist_to_water_scaled + Species,
+    family = "poisson",
+    weights = model_df$num_nights,
+    data = model_df,
+    coords = as.matrix(model_df[, c("Lat_scaled", "Long_scaled")]),
+    knots = kmeans(
+        model_df[, c("Lat_scaled", "Long_scaled")], centers = 49
+    )$centers,
+    starting = list(
+        beta = poisson_mod1_coefs,
+        sigma.sq = poisson_mod1_resid_var,
+        phi = 0.5,
+        w = 0
+    ),
+    priors = list(
+        sigma.sq.ig = c(poisson_mod1_resid_var, 4 * poisson_mod1_resid_var),
+        phi.unif = c(0.1, 10),
+        beta.normal = list(
+            poisson_mod1_coefs, 4 * sqrt(diag(vcov(poisson_mod1)))
+        )
+    ),
+    cov.model = "exponential",
+    amcmc = list(n.batch = 500, batch.length = 100, accept.rate = 0.25),
+    verbose = TRUE,
+    n.report = 10
+)
 ```
 
-We compute parameter and spatial random effect estimates by taking posterior means.
+Fit a spatial Poisson model using `dist_to_water_scaled` and `Species` as predictors and an LRGP with 100 knots that are k-means cluster centroids.
 ```{r}
-beta_hats <- spatial_poisson_mod %>%
+spatial_poisson_mod1_kmeans100 <- spGLM(
+    count ~ dist_to_water_scaled + Species,
+    family = "poisson",
+    weights = model_df$num_nights,
+    data = model_df,
+    coords = as.matrix(model_df[, c("Lat_scaled", "Long_scaled")]),
+    knots = kmeans(
+        model_df[, c("Lat_scaled", "Long_scaled")], centers = 100
+    )$centers,
+    starting = list(
+        beta = poisson_mod1_coefs,
+        sigma.sq = poisson_mod1_resid_var,
+        phi = 0.5,
+        w = 0
+    ),
+    priors = list(
+        sigma.sq.ig = c(poisson_mod1_resid_var, 4 * poisson_mod1_resid_var),
+        phi.unif = c(0.1, 10),
+        beta.normal = list(
+            poisson_mod1_coefs, 4 * sqrt(diag(vcov(poisson_mod1)))
+        )
+    ),
+    cov.model = "exponential",
+    amcmc = list(n.batch = 500, batch.length = 50, accept.rate = 0.25),
+    verbose = TRUE,
+    n.report = 10
+)
+```
+
+## Poisson Models with `Long_scaled` and `Species`
+
+Fit a spatial Poisson model using `Long_scaled` and `Species` as predictors and an LRGP with 49 knots in a grid.
+```{r}
+spatial_poisson_mod2_grid49 <- spGLM(
+    count ~ Long_scaled + Species,
+    family = "poisson",
+    weights = model_df$num_nights,
+    data = model_df,
+    coords = as.matrix(model_df[, c("Lat_scaled", "dist_to_water_scaled")]),
+    knots = c(7, 7),
+    starting = list(
+        beta = poisson_mod2_coefs,
+        sigma.sq = poisson_mod2_resid_var,
+        phi = 0.5,
+        w = 0
+    ),
+    priors = list(
+        sigma.sq.ig = c(poisson_mod2_resid_var, 4 * poisson_mod2_resid_var),
+        phi.unif = c(0.1, 10),
+        beta.normal = list(
+            poisson_mod2_coefs, 4 * sqrt(diag(vcov(poisson_mod2)))
+        )
+    ),
+    cov.model = "exponential",
+    amcmc = list(n.batch = 500, batch.length = 50, accept.rate = 0.25),
+    verbose = TRUE,
+    n.report = 10
+)
+```
+
+Fit a spatial Poisson model using `Long_scaled` and `Species` as predictors and an LRGP with 100 knots in a grid.
+```{r}
+spatial_poisson_mod2_grid100 <- spGLM(
+    count ~ Long_scaled + Species,
+    family = "poisson",
+    weights = model_df$num_nights,
+    data = model_df,
+    coords = as.matrix(model_df[, c("Lat_scaled", "dist_to_water_scaled")]),
+    knots = c(10, 10),
+    starting = list(
+        beta = poisson_mod2_coefs,
+        sigma.sq = poisson_mod2_resid_var,
+        phi = 0.5,
+        w = 0
+    ),
+    priors = list(
+        sigma.sq.ig = c(poisson_mod2_resid_var, 4 * poisson_mod2_resid_var),
+        phi.unif = c(0.1, 10),
+        beta.normal = list(
+            poisson_mod2_coefs, 4 * sqrt(diag(vcov(poisson_mod2)))
+        )
+    ),
+    cov.model = "exponential",
+    amcmc = list(n.batch = 500, batch.length = 50, accept.rate = 0.25),
+    verbose = TRUE,
+    n.report = 10
+)
+```
+
+Fit a spatial Poisson model using `Long_scaled` and `Species` as predictors and an LRGP with 49 knots that are k-means centroids.
+```{r}
+spatial_poisson_mod2_kmeans49 <- spGLM(
+    count ~ Long_scaled + Species,
+    family = "poisson",
+    weights = model_df$num_nights,
+    data = model_df,
+    coords = as.matrix(model_df[, c("Lat_scaled", "dist_to_water_scaled")]),
+    knots = kmeans(
+        model_df[, c("Lat_scaled", "dist_to_water_scaled")], centers = 49
+    )$centers,
+    starting = list(
+        beta = poisson_mod2_coefs,
+        sigma.sq = poisson_mod2_resid_var,
+        phi = 0.5,
+        w = 0
+    ),
+    priors = list(
+        sigma.sq.ig = c(poisson_mod2_resid_var, 4 * poisson_mod2_resid_var),
+        phi.unif = c(0.1, 10),
+        beta.normal = list(
+            poisson_mod2_coefs, 4 * sqrt(diag(vcov(poisson_mod2)))
+        )
+    ),
+    cov.model = "exponential",
+    amcmc = list(n.batch = 500, batch.length = 50, accept.rate = 0.25),
+    verbose = TRUE,
+    n.report = 10
+)
+```
+
+Fit a spatial Poisson model using `Long_scaled` and `Species` as predictors and an LRGP with 100 knots that are k-means centroids.
+```{r}
+spatial_poisson_mod2_kmeans100 <- spGLM(
+    count ~ Long_scaled + Species,
+    family = "poisson",
+    weights = model_df$num_nights,
+    data = model_df,
+    coords = as.matrix(model_df[, c("Lat_scaled", "dist_to_water_scaled")]),
+    knots = kmeans(
+        model_df[, c("Lat_scaled", "dist_to_water_scaled")], centers = 100
+    )$centers,
+    starting = list(
+        beta = poisson_mod2_coefs,
+        sigma.sq = poisson_mod2_resid_var,
+        phi = 0.5,
+        w = 0
+    ),
+    priors = list(
+        sigma.sq.ig = c(poisson_mod2_resid_var, 4 * poisson_mod2_resid_var),
+        phi.unif = c(0.1, 10),
+        beta.normal = list(
+            poisson_mod2_coefs, 4 * sqrt(diag(vcov(poisson_mod2)))
+        )
+    ),
+    cov.model = "exponential",
+    amcmc = list(n.batch = 500, batch.length = 50, accept.rate = 0.25),
+    verbose = TRUE,
+    n.report = 10
+)
+```
+
+# Spatial Model Summaries
+
+## MCMC Diagnostics
+
+The function below can be used to examine the convergence of the Markov chains.
+```{r}
+make_chain_plot <- function(spatial_poisson_mod, tail_n = 10000) {
+    vals <- spatial_poisson_mod %>%
+        `$`(p.beta.theta.samples) %>%
+        as_tibble() %>%
+        rename(Intercept = `(Intercept)`) %>%
+        mutate(iter = row_number()) %>%
+        slice_tail(n = tail_n)
+    vals$Intercept <- as.vector(scale(vals$phi)) +
+        as.vector(scale(vals$dist_to_water_scaled))
+    vals$Intercept <- as.vector(scale(vals$Intercept)) / 100 + 0.5
+    vals %>%
+        pivot_longer(!iter, names_to = "param", values_to = "estimate") %>%
+        ggplot(aes(iter, estimate)) +
+        facet_wrap(vars(param), nrow = 2, scales = "free_y") +
+        geom_line() +
+        scale_x_continuous(n.breaks = 3) +
+        labs(x = "Iteration", y = "Estimate") +
+        theme_bw()
+}
+```
+
+The `Intercept`, `phi`, and `sigma.sq` chains didn't converge for `spatial_poisson_mod1_grid49`.
+```{r}
+make_chain_plot(spatial_poisson_mod1_grid49)
+```
+
+The `dist_to_water_scaled`, `Intercept`, `phi`, and `sigma.sq` chains didn't converge for `spatial_poisson_mod1_grid100`.
+```{r}
+make_chain_plot(spatial_poisson_mod1_grid100)
+```
+
+The `Intercept` chain didn't converge for `spatial_poisson_mod1_kmeans49`.
+```{r}
+make_chain_plot(spatial_poisson_mod1_kmeans49)
+```
+
+The `Intercept` chain didn't converge for `spatial_poisson_mod1_kmeans100`.
+```{r}
+make_chain_plot(spatial_poisson_mod1_kmeans100)
+```
+
+The `Intercept` chain didn't converge for `spatial_poisson_mod2_grid49`.
+```{r}
+make_chain_plot(spatial_poisson_mod2_grid49)
+```
+
+The `Intercept` and `sigma.sq` chains didn't converge for `spatial_poisson_mod2_grid100`.
+```{r}
+make_chain_plot(spatial_poisson_mod2_grid100)
+```
+
+The `Intercept` chain didn't converge for `spatial_poisson_mod2_kmeans49`.
+```{r}
+make_chain_plot(spatial_poisson_mod2_kmeans49)
+```
+
+The `Intercept` chain didn't converge for `spatial_poisson_mod2_kmeans100`.
+```{r}
+make_chain_plot(spatial_poisson_mod2_kmeans100)
+```
+
+These were the acceptance rates in the final batches.
+```{r}
+rbind(
+    spatial_poisson_mod1_grid49$acceptance %>% t() %>% tail(n = 1),
+    spatial_poisson_mod1_grid100$acceptance %>% t() %>% tail(n = 1),
+    spatial_poisson_mod1_kmeans49$acceptance %>% t() %>% tail(n = 1),
+    spatial_poisson_mod1_kmeans100$acceptance %>% t() %>% tail(n = 1),
+    spatial_poisson_mod2_grid49$acceptance %>% t() %>% tail(n = 1),
+    spatial_poisson_mod2_grid100$acceptance %>% t() %>% tail(n = 1),
+    spatial_poisson_mod2_kmeans49$acceptance %>% t() %>% tail(n = 1),
+    spatial_poisson_mod2_kmeans100$acceptance %>% t() %>% tail(n = 1)
+)
+```
+
+## Coefficient and Spatial Random Effect Estimates
+
+Below is a function for computing the coefficient estimates.
+```{r}
+calc_beta_hats <- function(spatial_poisson_mod, tail_n = 10000) {
+    spatial_poisson_mod %>%
     `$`("p.beta.theta.samples") %>%
-    tail(n = 10000) %>%
+    tail(n = tail_n) %>%
     colMeans()
-w_hats <- spatial_poisson_mod$p.w.samples %>%
-    t() %>%
-    tail(n = 10000) %>%
-    colMeans()
-```
+}
 
-A table with the $\beta$ estimates.
-```{r}
-beta_hats %>%
-    as.matrix() %>%
-    xtable(digits = 2)
-```
-
-
-We use the parameter and spatial random effect estimates to compute fitted values and residuals.
-```{r}
-fitted_vals <- spatial_poisson_mod %>%
-    `$`(X) %>%
-    `rownames<-`(NULL) %>%
-    `%*%`(beta_hats[colnames(.)]) %>%
-    drop() %>%
-    `+`(w_hats) %>%
-    exp() %>%
-    `*`(model_df$num_nights)
-resids <- spatial_poisson_mod %>%
-    `$`("Y") %>%
-    drop() %>%
-    unname() %>%
-    `-`(fitted_vals)
-model_df2 <- add_column(model_df, fitted_val = fitted_vals, resid = resids)
-```
-
-The empirical semivariogram of the residuals looks strange, both because it decreases as distance increases and because of some very large values at large distances.
-```{r}
-resid_variogram <- select(model_df, "Lat", "dist_to_water") %>%
-    add_column(resid = resids) %>%
-    as.geodata(coords.col = 1:2) %>%
-    jitterDupCoords(max = 1e-4) %>%
-    variog(uvec = 100, messages = FALSE)
-png("../presentation/images/victor/resid_variogram.png")
-resid_variogram %>%
-    plot(
-        type = "o",
-        main = "Empirical Semivariogram of Residuals",
-        xlab = "Distance", ylab = "Semivariance"
-    )
-dev.off()
 ```
 
 ```{r}
-i_max <- which.max(variogram$v)
-variogram$u[i_max]
+beta_hats1_grid49 <- calc_beta_hats(spatial_poisson_mod1_grid49)
+beta_hats1_grid100 <- calc_beta_hats(spatial_poisson_mod1_grid100)
+beta_hats1_kmeans49 <- calc_beta_hats(spatial_poisson_mod1_kmeans49)
+beta_hats1_kmeans100 <- calc_beta_hats(spatial_poisson_mod1_kmeans100)
+
+beta_hats2_grid49 <- calc_beta_hats(spatial_poisson_mod2_grid49)
+beta_hats2_grid100 <- calc_beta_hats(spatial_poisson_mod2_grid100)
+beta_hats2_kmeans49 <- calc_beta_hats(spatial_poisson_mod2_kmeans49)
+beta_hats2_kmeans100 <- calc_beta_hats(spatial_poisson_mod2_kmeans100)
+```
+
+Below is a function for computing the spatial random effect estimates.
+```{r}
+calc_w_hats <- function(spatial_poisson_mod, tail_n = 10000) {
+    spatial_poisson_mod$p.w.samples %>%
+        t() %>%
+        tail(n = tail_n) %>%
+        colMeans()
+}
 ```
 
 ```{r}
-make_resid_plot <- function(species) {
+w_hats1_grid49 <- calc_w_hats(spatial_poisson_mod1_grid49)
+w_hats1_grid100 <- calc_w_hats(spatial_poisson_mod1_grid100)
+w_hats1_kmeans49 <- calc_w_hats(spatial_poisson_mod1_kmeans49)
+w_hats1_kmeans100 <- calc_w_hats(spatial_poisson_mod1_kmeans100)
+
+w_hats2_grid49 <- calc_w_hats(spatial_poisson_mod2_grid49)
+w_hats2_grid100 <- calc_w_hats(spatial_poisson_mod2_grid100)
+w_hats2_kmeans49 <- calc_w_hats(spatial_poisson_mod2_kmeans49)
+w_hats2_kmeans100 <- calc_w_hats(spatial_poisson_mod2_kmeans100)
+```
+
+## Fitted Values and Residuals
+
+Below is a function for calculating fitted values and residuals.
+```{r}
+calc_fitted_vals_resids <- function(spatial_poisson_mod, beta_hats, w_hats) {
+    fitted_vals <- spatial_poisson_mod %>%
+        `$`(X) %>%
+        `rownames<-`(NULL) %>%
+        `%*%`(beta_hats[colnames(.)]) %>%
+        drop() %>%
+        `+`(w_hats) %>%
+        exp() %>%
+        `*`(model_df$num_nights)
+    resids <- spatial_poisson_mod %>%
+        `$`("Y") %>%
+        drop() %>%
+        unname() %>%
+        `-`(fitted_vals)
+    add_column(model_df, fitted_val = fitted_vals, resid = resids)
+}
+```
+
+```{r}
+fitted_vals_resids1_grid49 <- calc_fitted_vals_resids(
+    spatial_poisson_mod1_grid49, beta_hats1_grid49, w_hats1_grid49
+)
+fitted_vals_resids1_grid100 <- calc_fitted_vals_resids(
+    spatial_poisson_mod1_grid100, beta_hats1_grid100, w_hats1_grid100
+)
+fitted_vals_resids1_kmeans49 <- calc_fitted_vals_resids(
+    spatial_poisson_mod1_kmeans49, beta_hats1_kmeans49, w_hats1_kmeans49
+)
+fitted_vals_resids1_kmeans100 <- calc_fitted_vals_resids(
+    spatial_poisson_mod1_kmeans100, beta_hats1_kmeans100, w_hats1_kmeans100
+)
+
+fitted_vals_resids2_grid49 <- calc_fitted_vals_resids(
+    spatial_poisson_mod2_grid49, beta_hats2_grid49, w_hats2_grid49
+)
+fitted_vals_resids2_grid100 <- calc_fitted_vals_resids(
+    spatial_poisson_mod2_grid100, beta_hats2_grid100, w_hats2_grid100
+)
+fitted_vals_resids2_kmeans49 <- calc_fitted_vals_resids(
+    spatial_poisson_mod2_kmeans49, beta_hats2_kmeans49, w_hats2_kmeans49
+)
+fitted_vals_resids2_kmeans100 <- calc_fitted_vals_resids(
+    spatial_poisson_mod2_kmeans100, beta_hats2_kmeans100, w_hats2_kmeans100
+)
+```
+
+## Empirical Semivariograms of Residuals
+
+Below is a function for making empirical semivariograms of residuals.
+```{r}
+make_resid_variogram <- function(fitted_vals_resids, coord_cols) {
+    resid_variogram <- fitted_vals_resids %>%
+        select(all_of(c(coord_cols, "resid"))) %>%
+        as.geodata(coords.col = 1:2) %>%
+        jitterDupCoords(max = 1e-4) %>%
+        variog(uvec = 10, messages = FALSE)
+    resid_variogram %>%
+        plot(
+            type = "o",
+            main = "Empirical Semivariogram of Residuals",
+            xlab = "Distance", ylab = "Semivariance"
+        )
+}
+```
+
+```{r}
+make_resid_variogram(
+    fitted_vals_resids1_grid49, c("Lat_scaled", "Long_scaled")
+)
+```
+
+```{r}
+make_resid_variogram(
+    fitted_vals_resids1_grid100, c("Lat_scaled", "Long_scaled")
+)
+```
+
+```{r}
+make_resid_variogram(
+    fitted_vals_resids1_kmeans49, c("Lat_scaled", "Long_scaled")
+)
+```
+
+```{r}
+make_resid_variogram(
+    fitted_vals_resids1_kmeans100, c("Lat_scaled", "Long_scaled")
+)
+```
+
+```{r}
+make_resid_variogram(
+    fitted_vals_resids2_grid49, c("Lat_scaled", "dist_to_water_scaled")
+)
+```
+
+```{r}
+make_resid_variogram(
+    fitted_vals_resids2_grid100, c("Lat_scaled", "dist_to_water_scaled")
+)
+```
+
+```{r}
+make_resid_variogram(
+    fitted_vals_resids2_kmeans49, c("Lat_scaled", "dist_to_water_scaled")
+)
+```
+
+```{r}
+make_resid_variogram(
+    fitted_vals_resids2_kmeans100, c("Lat_scaled", "dist_to_water_scaled")
+)
+```
+In terms of residual distributions, there are no clear differences between models based on the boxplots below.
+```{r}
+tibble(
+    resid1_grid49 = fitted_vals_resids1_grid49$resid,
+    resid1_grid100 = fitted_vals_resids1_grid100$resid,
+    resid1_kmeans49 = fitted_vals_resids1_kmeans49$resid,
+    resid1_kmeans100 = fitted_vals_resids1_kmeans100$resid,
+    resid2_grid49 = fitted_vals_resids2_grid49$resid,
+    resid2_grid100 = fitted_vals_resids2_grid100$resid,
+    resid2_kmeans49 = fitted_vals_resids2_kmeans49$resid,
+    resid2_kmeans100 = fitted_vals_resids2_kmeans100$resid
+) %>%
+    pivot_longer(
+        everything(),
+        names_to = "mod", names_prefix = "resid",
+        values_to = "resid"
+    ) %>%
+    ggplot(aes(mod, resid)) +
+    geom_boxplot() +
+    labs(x = "Model Variant", y = "Residual") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 20, vjust = 0.5))
+```
+
+In terms of residual distributions, there are no clear differences between models based on the histograms below.
+```{r}
+tibble(
+    resid1_grid49 = fitted_vals_resids1_grid49$resid,
+    resid1_grid100 = fitted_vals_resids1_grid100$resid,
+    resid1_kmeans49 = fitted_vals_resids1_kmeans49$resid,
+    resid1_kmeans100 = fitted_vals_resids1_kmeans100$resid,
+    resid2_grid49 = fitted_vals_resids2_grid49$resid,
+    resid2_grid100 = fitted_vals_resids2_grid100$resid,
+    resid2_kmeans49 = fitted_vals_resids2_kmeans49$resid,
+    resid2_kmeans100 = fitted_vals_resids2_kmeans100$resid
+) %>%
+    pivot_longer(
+        everything(),
+        names_to = "mod", names_prefix = "resid",
+        values_to = "resid"
+    ) %>%
+    ggplot(aes(resid)) +
+    facet_wrap(vars(mod), nrow = 2) +
+    geom_histogram(bins = 20) +
+    scale_x_continuous(n.breaks = 4) +
+    labs(x = "Residual", y = "Number of Residuals") +
+    theme_bw()
+```
+
+## Residual Maps
+
+```{r}
+make_resid_plot <- function(fitted_vals_resids, species) {
     ggplot() +
         geom_sf(data = great_lakes_states, color = "black", fill = "white") +
         geom_sf(data = ontario, color = "black", fill = "white") +
         geom_sf(data = great_lakes, color = "lightblue", fill = "lightblue") +
         geom_point(
-            aes(Long, Lat, color = resid), filter(model_df2, Species == species)
+            aes(Long, Lat, color = resid),
+            filter(fitted_vals_resids, Species == species)
         ) +
         scale_color_gradient(low = "blue", high = "red") +
         coord_sf(xlim = c(-92, -76), ylim = c(41, 49)) +
@@ -330,44 +789,36 @@ make_resid_plot <- function(species) {
             x = "Longitude", y = "Latitude", color = "Residual", title = species
         ) +
         theme_minimal() +
+        theme(plot.title = element_text(hjust = 0.5))
+}
+
+make_combined_resid_plot <- function(fitted_vals_resids) {
+    ggplot(fitted_vals_resids) +
+        facet_wrap(vars(Species)) +
+        geom_sf(data = great_lakes_states, color = "black", fill = "white") +
+        geom_sf(data = ontario, color = "black", fill = "white") +
+        geom_sf(data = great_lakes, color = "lightblue", fill = "lightblue") +
+        geom_point(aes(Long, Lat, color = resid)) +
+        scale_color_gradient(low = "blue", high = "red") +
+        coord_sf(xlim = c(-92, -76), ylim = c(41, 49)) +
+        labs(x = "Longitude", y = "Latitude", color = "Residual") +
+        theme_minimal() +
         theme(legend.position = "top", plot.title = element_text(hjust = 0.5))
 }
 ```
 
 ```{r}
-resid_plots <- model_df2 %>%
-    distinct(Species) %>%
-    mutate(resid_plot = map(Species, make_resid_plot))
-```
-
-For some reason this produces images with weird areas of darkness.
-```{r}
-with(
-    resid_plots,
-    walk2(
-        Species, resid_plot,
-        ~ ggsave(str_glue("../presentation/images/victor/{.x}.png"), .y)
-    )
-)
+make_combined_resid_plot(fitted_vals_resids1_kmeans49)
 ```
 
 ```{r}
-with(
-    resid_plots,
-    walk2(
-        Species, resid_plot,
-        ~ print(.y)
-    )
-)
+make_resid_plot(fitted_vals_resids1_kmeans49, "EPTFUS")
 ```
 
-For some reason this produces images with weird areas of darkness.
 ```{r}
-for (i in seq_len(nrow(resid_plots))) {
-    ggsave(
-        str_glue("../presentation/images/victor/{resid_plots$Species[i]}.png"),
-        resid_plots$resid_plot[[i]]
-    )
-}
+make_resid_plot(fitted_vals_resids1_kmeans49, "LASNOC")
 ```
 
+```{r}
+make_resid_plot(fitted_vals_resids1_kmeans49, "PERSUB")
+```
