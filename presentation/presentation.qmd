@@ -1,10 +1,10 @@
 ---
 title: "US Bat Counts"
-format: pdf
-#format:
-#    revealjs:
-#        theme: serif
-#        embed-resources: true
+# format: pdf
+format:
+   revealjs:
+       theme: serif
+       embed-resources: true
 
 bibliography: references.bib
 author: 
@@ -271,8 +271,8 @@ Below are the priors on $\phi$, $\sigma^2$, and $\beta$:
 
 Two pairs of coordinate system and covariate vector were tried:
 
-- Coordinates: latitude and longitude, covariates: distance to water, species
-- Coordinates: latitude and distance to water, covariates: longitude, species
+1. Coordinates: latitude and longitude, covariates: distance to water, species
+2. Coordinates: latitude and distance to water, covariates: longitude, species
 
 For both pairs, latitude, longitude, and distance to water were standardized (centered and scaled)
 
@@ -284,13 +284,35 @@ Eight model variants were fitted.
 - Two possible ways to choose the knots (grid, k-means centroids)
 - Two possible coordinate system-covariate vector pairs
 
-## MCMC Chains
+The fitted models were quite similar. On the next 2 slides,
 
-![](./images/victor/chain_plot.png)
+- Variants labeled "1" used latitude, longitude coordinates
+- Variants labeled "2" used latitude, distance to water coordinates
+
+## Residual Histograms
+
+![](./images/victor/resid_histograms.png)
+
+## Residual Boxplots
+
+![](./images/victor/resid_boxplots.png)
+
+## Example Residual Plots
+
+The next five slides show various visualizations of the residuals for the model with
+
+- coordinates: latitude and longitude
+- covariates: distance to water, species
+- 49 knots
+- k-means centroids as knots
 
 ## Empirical Semivariogram of the Residuals
 
 ![](./images/victor/resid_variogram.png)
+
+## Residual Maps
+
+![](./images/victor/combined_resid_plot.png)
 
 ## Residual Map for EPTFUS
 
