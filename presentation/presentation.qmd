@@ -297,14 +297,18 @@ The fitted models were quite similar. On the next 2 slides,
 
 ![](./images/victor/resid_boxplots.png)
 
-## Example Residual Plots
+## Example Plots for One Model Variant
 
-The next five slides show various visualizations of the residuals for the model with
+The next five slides show various visualizations of the MCMC chains and residuals for the model with
 
 - coordinates: latitude and longitude
 - covariates: distance to water, species
 - 49 knots
 - k-means centroids as knots
+
+## MCMC Chains
+
+![](./images/victor/chain_plot.png)
 
 ## Empirical Semivariogram of the Residuals
 

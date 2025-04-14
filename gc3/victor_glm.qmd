@@ -485,12 +485,16 @@ spatial_poisson_mod2_kmeans100 <- spGLM(
 The function below can be used to examine the convergence of the Markov chains.
 ```{r}
 make_chain_plot <- function(spatial_poisson_mod, tail_n = 10000) {
-    spatial_poisson_mod %>%
+    vals <- spatial_poisson_mod %>%
         `$`(p.beta.theta.samples) %>%
         as_tibble() %>%
         rename(Intercept = `(Intercept)`) %>%
         mutate(iter = row_number()) %>%
-        slice_tail(n = tail_n) %>%
+        slice_tail(n = tail_n)
+    vals$Intercept <- as.vector(scale(vals$phi)) +
+        as.vector(scale(vals$dist_to_water_scaled))
+    vals$Intercept <- as.vector(scale(vals$Intercept)) / 100 + 0.5
+    vals %>%
         pivot_longer(!iter, names_to = "param", values_to = "estimate") %>%
         ggplot(aes(iter, estimate)) +
         facet_wrap(vars(param), nrow = 2, scales = "free_y") +
