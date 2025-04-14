@@ -19,6 +19,8 @@ csl: diabetologia.csl
 
 # Introduction
 
+![Big Brown Bat](./images/big_brown_bat.jpg)
+
 ## Why this dataset?
 
 - Bats are an essential organism in North American ecosystems
