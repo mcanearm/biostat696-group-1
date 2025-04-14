@@ -49,29 +49,6 @@ model_df <- df %>% dplyr::rename_with(~ gsub("_count", "", .x), ends_with("_coun
 ```
 
 ```{r}
-
-summary(lm(avg_count ~ Lat + Long + dist_to_water + water_size + Species, model_df))
-
-```
-
-```{r, fig.height=7, fig.width=10}
-
-mainmap <- ne_states(country = c("united states of america"), returnclass = "sf")
-michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia", "Minnesota", "Iowa", "Texas", "Kansas", "Oklahoma", "Nebraska", "Missouri"))
-
-ggplot(data=model_df[model_df$Species %in% c("EPTFUS", "TADBRA"),]) +
-    geom_sf(data = michiganplus) + 
-    facet_wrap(~ Species, ncol=2) + 
-    geom_point(aes(x=Long, y=Lat, color=log1p(avg_count)), size=0.75) +
-    theme_minimal() +
-    theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
-    guides(color = guide_colorbar(title="Sightings/Night\n(Log1p)")) +
-    # geom_jitter(data=sightings_df, size = 1.5, aes(x = Long, y = Lat, color = log1p(count))) +
-    # coord_sf(ylim = c(25, 49), xlim = c(-75, -107)) +
-    # scale_color_viridis_c(name = "Log Counts", option = "B") +
-    ggtitle("Log1p Sightings per Night by Species")
-```
-```{r}
 species <- unique(model_df$Species)
 
 # Jitter the spatial variables in order to deal with we have replicates due to
@@ -80,13 +57,13 @@ species <- unique(model_df$Species)
 # spatial coordinates are on similar scale.
 model_df <- model_df |>
     dplyr::mutate(
-        Lat = jitter(Lat, 1e-6),
-        Long = jitter(Long, 1e-6),
+        Lat_jit = jitter(Lat, 1e-6),
+        Long_jit = jitter(Long, 1e-6),
         dist_to_water = jitter(dist_to_water, 1e-6)
     ) |>
     mutate(
-        Lat_norm = scale(Lat),
-        Long_norm = scale(Long),
+        Lat_norm = scale(Lat_jit),
+        Long_norm = scale(Long_jit),
         dist_to_water_norm = scale(dist_to_water)
     )
 
@@ -98,23 +75,56 @@ for (species_text in species) {
 
 ```
 
+```{r, fig.height=7, fig.width=10}
+model_df_sub <- model_df |> 
+    dplyr::filter(Species %in% c("EPTFUS", "LASNOC", "PERSUB"))
+
+mainmap <- ne_states(country = c("united states of america"), returnclass = "sf")
+michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia", "Minnesota", "Iowa", "Texas", "Kansas", "Oklahoma", "Nebraska", "Missouri"))
+
+ggplot(data=model_df_sub) +
+    geom_sf(data = michiganplus) + 
+    facet_wrap(~ Species, ncol=2) + 
+    geom_point(aes(x=Long, y=Lat, color=log1p(avg_count)), size=0.75) +
+    theme_minimal() +
+    theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
+    guides(color = guide_colorbar(title="Sightings/Night\n(Log1p)")) +
+    ggtitle("Log1p Sightings per Night by Species")
+```
+
+```{r}
+lin_model <- lm(avg_count ~ Lat_norm + Long_norm + dist_to_water_norm + Species, model_df_sub)
+summary(lin_model)
+model_df_sub |> 
+    mutate(lin_model_resid = lin_model$residuals) |>
+    dplyr::filter(Species %in% c("EPTFUS", "LASNOC", "PERSUB")) |>
+    ggplot() +
+        geom_sf(data = michiganplus) + 
+        facet_wrap(~ Species, ncol=2) + 
+        geom_point(aes(x=Long, y=Lat, color=sign(lin_model_resid) * abs(lin_model_resid)^(1/3)), size=0.75) +
+        theme_minimal() +
+        theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
+        guides(color = guide_colorbar(title="Residual^(1/3)")) +
+        ggtitle("Linear Model Residuals by Species")
+```
+
 ```{r}
 n.samples <- 5000
-starting <- list("phi"=3/0.5, "sigma.sq"=10, "tau.sq"=5)
+starting <- list("phi"=20, "sigma.sq"=10, "tau.sq"=5)
 tuning <- list("phi"=0.1, "sigma.sq"=0.05, "tau.sq"=0.05)
 priors <- list(
-    "beta.Norm"=list(rep(0, 16), diag(1, 16)),
-    "phi.Unif"=c(3/2, 3/(0.1 * 2)), 
-    "sigma.sq.IG"=c(2, 24.44^2), # Center around residual variance
-    "tau.sq.IG"=c(2, 0.1 * 24.44^2) # Assume 10% of variance is due to noise
+    "beta.Norm"=list(rep(0, 4), diag(1, 4)),
+    "phi.Unif"=c(.00005, 40), 
+    "sigma.sq.IG"=c(2, 10.20467^2), # Center around residual variance
+    "tau.sq.IG"=c(2, 0.1 * 10.20467^2) # Assume 10% of variance is due to noise
 )
 cov.model <- "exponential"
 amcmc = list(n.batch = 500, batch.length = 50, accept.rate = 0.25)
 
 spatial_lm <- spBayes::spLM(
-    formula=log1p(avg_count) ~ Long_norm + water_size + Species,
-    data=model_df,
-    coords=as.matrix(model_df[, c("Lat_norm", "dist_to_water_norm")]),
+    formula=log1p(avg_count) ~ Long_norm + Species,
+    data=model_df_sub,
+    coords=as.matrix(model_df_sub[, c("Lat_norm", "dist_to_water_norm")]),
     starting=starting,
     cov.model=cov.model,
     amcmc=amcmc,
@@ -169,12 +179,12 @@ residual_plot_data <- cbind.data.frame(
     'var'=posterior_var,
     'mean'=posterior_mean,
     'true'=spatial_lm_fit$Y,
-    'lat'=model_df$Lat,
-    'long'=model_df$Long,
-    'lat_norm'=model_df$Lat_norm,
-    'long_norm'=model_df$Long_norm,
-    'dist_to_water_norm'=model_df$dist_to_water_norm,
-    'species'=model_df$Species,
+    'lat'=model_df_sub$Lat,
+    'long'=model_df_sub$Long,
+    'lat_norm'=model_df_sub$Lat_norm,
+    'long_norm'=model_df_sub$Long_norm,
+    'dist_to_water_norm'=model_df_sub$dist_to_water_norm,
+    'species'=model_df_sub$Species,
     'resid'=spatial_lm_fit$Y - posterior_mean,
     'spatial_effect'=apply(spatial_lm_fit$p.w.recover.samples, 1, mean)
 )
@@ -190,14 +200,13 @@ plot(
 
 ```{r}
 library(spdep)
-nb <- knn2nb(knearneigh(model_df[, c("Lat_norm", "dist_to_water_norm")], k = 4))  # Define neighbors
+nb <- knn2nb(knearneigh(model_df_sub[, c("Lat_norm", "dist_to_water_norm")], k = 4))  # Define neighbors
 listw <- nb2listw(nb, style = "W")  # Create spatial weights
 moran.test(residual_plot_data$resid, listw)  # Run Moran's I test
 ```
 
 ```{r}
 residual_plot_data |> 
-    dplyr::filter(species %in% c("EPTFUS", "LASNOC", "PERSUB")) |>
     ggplot(aes(x=resid, fill=species)) + 
         geom_density(alpha=0.5) + 
         scale_fill_viridis_d() +
@@ -211,7 +220,6 @@ residual_plot_data |>
 
 ```{r}
 residual_plot_data |>
-    dplyr::filter(species %in% c("EPTFUS", "LASNOC", "PERSUB")) |>
     ggplot(aes(x=mean, y=resid)) + 
         geom_point(size=2.0) +
         theme_minimal() +
@@ -227,7 +235,6 @@ residual_plot_data |>
 
 ```{r}
 residual_plot_data |>
-    dplyr::filter(species %in% c("EPTFUS", "LASNOC", "PERSUB")) |>
     ggplot() +
         geom_sf(data = michiganplus) + 
         # facet_wrap(~ Species, ncol=3) + 
