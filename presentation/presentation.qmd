@@ -95,8 +95,8 @@ csl: diabetologia.csl
     - Species
     
 \begin{align*}
-    Y_i &= X_i^\top \beta + \epsilon_i \\ 
-    \epsilon_i &\sim N(0, \sigma^2)
+    Y &= X\beta + \epsilon \\ 
+    \epsilon &\sim N(0, \sigma^2 I_n)
 \end{align*}
     
 ## Non-Spatial Linear Model - Residuals

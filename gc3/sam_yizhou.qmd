@@ -19,6 +19,7 @@ library(spBayes)
 library(coda)
 library(ggspatial)
 library(dplyr)
+library(xtable)
 
 df <- read.csv("../data/model_data.csv")
 df
@@ -35,15 +36,15 @@ scaled_coord_df <- cbind.data.frame("AcousticSite" = df[, "AcousticSite"], scale
 
 ```{r}
 
-model_df <- df %>% dplyr::rename_with(~ gsub("_count", "", .x), ends_with("_count"))  %>% 
+model_df <- df |> dplyr::rename_with(~ gsub("_count", "", .x), ends_with("_count"))  |> 
     reshape2::melt(
     id.vars = c("AcousticSite", "Year", "Lat", "Long", "dist_to_water", "water_size", "num_nights", "num_detectable_species"),
     variable.name="Species",
     value.name="count"
-) %>% dplyr::filter(Species != "ALL" & count != 0) %>% 
+) |> dplyr::filter(Species != "ALL" & count != 0) |> 
     # Combine years together to remove temporal replicates
-    dplyr::group_by(AcousticSite, Lat, Long, dist_to_water, water_size, Species, num_detectable_species) %>%
-    dplyr::summarise(num_nights = sum(num_nights), count = sum(count)) %>%
+    dplyr::group_by(AcousticSite, Lat, Long, dist_to_water, water_size, Species, num_detectable_species) |>
+    dplyr::summarise(num_nights = sum(num_nights), count = sum(count)) |>
     transform(avg_count = count / num_nights) 
 
 ```
@@ -80,7 +81,7 @@ model_df_sub <- model_df |>
     dplyr::filter(Species %in% c("EPTFUS", "LASNOC", "PERSUB"))
 
 mainmap <- ne_states(country = c("united states of america"), returnclass = "sf")
-michiganplus <- mainmap %>% dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia", "Minnesota", "Iowa", "Texas", "Kansas", "Oklahoma", "Nebraska", "Missouri"))
+michiganplus <- mainmap |> dplyr::filter(name %in% c("Illinois", "Michigan", "Wisconsin", "Ontario", "Ohio", "Indiana", "Pennsylvania", "New York", "West Virginia", "Minnesota", "Iowa", "Texas", "Kansas", "Oklahoma", "Nebraska", "Missouri"))
 
 ggplot(data=model_df_sub) +
     geom_sf(data = michiganplus) + 
@@ -93,7 +94,7 @@ ggplot(data=model_df_sub) +
 ```
 
 ```{r}
-lin_model <- lm(avg_count ~ Lat_norm + Long_norm + dist_to_water_norm + Species, model_df_sub)
+lin_model <- lm(log1p(avg_count) ~ Lat_norm + Long_norm + dist_to_water_norm + Species, model_df_sub)
 summary(lin_model)
 model_df_sub |> 
     mutate(lin_model_resid = lin_model$residuals) |>
@@ -134,7 +135,7 @@ spatial_lm <- spBayes::spLM(
     verbose=TRUE
 )
 
-spatial_lm_fit <- spatial_lm %>% spRecover(start=round(n.samples/3), verbose=TRUE)
+spatial_lm_fit <- spatial_lm |> spRecover(start=round(n.samples/3), verbose=TRUE)
 ```
 
 ```{r}
@@ -179,12 +180,12 @@ residual_plot_data <- cbind.data.frame(
     'var'=posterior_var,
     'mean'=posterior_mean,
     'true'=spatial_lm_fit$Y,
-    'lat'=model_df_sub$Lat,
-    'long'=model_df_sub$Long,
+    'Lat'=model_df_sub$Lat,
+    'Long'=model_df_sub$Long,
     'lat_norm'=model_df_sub$Lat_norm,
     'long_norm'=model_df_sub$Long_norm,
     'dist_to_water_norm'=model_df_sub$dist_to_water_norm,
-    'species'=model_df_sub$Species,
+    'Species'=model_df_sub$Species,
     'resid'=spatial_lm_fit$Y - posterior_mean,
     'spatial_effect'=apply(spatial_lm_fit$p.w.recover.samples, 1, mean)
 )
@@ -207,7 +208,7 @@ moran.test(residual_plot_data$resid, listw)  # Run Moran's I test
 
 ```{r}
 residual_plot_data |> 
-    ggplot(aes(x=resid, fill=species)) + 
+    ggplot(aes(x=resid, fill=Species)) + 
         geom_density(alpha=0.5) + 
         scale_fill_viridis_d() +
         labs(
@@ -225,12 +226,7 @@ residual_plot_data |>
         theme_minimal() +
         theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
         geom_hline(yintercept=0, linetype="dashed") +
-        facet_wrap(.~species, ncol=1)
-        # guides(color = guide_colorbar(title="Residuals")) +
-        # geom_jitter(data=sightings_df, size = 1.5, aes(x = Long, y = Lat, color = log1p(count))) +
-        # coord_sf(ylim = c(25, 49), xlim = c(-75, -107)) +
-        # scale_color_viridis_c(name = "Log Counts", option = "B") +
-        # ggtitle("Residuals by Species")
+        facet_wrap(.~Species, ncol=1)
 ```
 
 ```{r}
@@ -238,10 +234,77 @@ residual_plot_data |>
     ggplot() +
         geom_sf(data = michiganplus) + 
         # facet_wrap(~ Species, ncol=3) + 
-        geom_tile(aes(x=long, y=lat, fill=spatial_effect), width=0.25, height=0.25) +
+        geom_tile(aes(x=Long, y=Lat, fill=spatial_effect), width=0.25, height=0.25) +
         theme_minimal() +
         theme(legend.position = "right", axis.text.x=element_text(angle=45)) +
         coord_sf(ylim = c(40, 49), xlim = c(-75, -100)) +
         # scale_color_viridis_c(name = "Log Counts", option = "B") +
         ggtitle("Estimated Spatial Effects")
+```
+
+```{r}
+great_lakes_states <- ne_states(
+    country = "United States of America", returnclass = "sf"
+) |>
+    dplyr::filter(
+        name %in% c(
+            "Minnesota", "Wisconsin", "Illinois", "Indiana", "Michigan", "Ohio",
+            "Pennsylvania", "New York"
+        )
+    )
+ontario <- ne_states(country = "Canada", returnclass = "sf") |>
+    dplyr::filter(name == "Ontario")
+great_lakes <- ne_download(
+    scale = 50, type = "lakes", category = "physical", returnclass = "sf"
+) |>
+    dplyr::filter(
+        name %in% c(
+            "Lake Superior", "Lake Michigan", "Lake Huron", "Lake Erie",
+            "Lake Ontario"
+        )
+    )
+
+
+make_resid_plot <- function(species) {
+    ggplot() +
+        geom_sf(data = great_lakes_states, color = "black", fill = "white") +
+        geom_sf(data = ontario, color = "black", fill = "white") +
+        geom_sf(data = great_lakes, color = "lightblue", fill = "lightblue") +
+        geom_point(
+            aes(Long, Lat, color = resid), dplyr::filter(residual_plot_data, Species == species)
+        ) +
+        scale_color_gradient(low = "blue", high = "red") +
+        coord_sf(xlim = c(-92, -76), ylim = c(41, 49)) +
+        labs(
+            x = "Longitude", y = "Latitude", color = "Residual", title = species
+        ) +
+        theme_minimal() +
+        theme(legend.position = "top", plot.title = element_text(hjust = 0.5))
+}
+```
+
+```{r}
+resid_plots <- residual_plot_data |>
+    distinct(Species) |>
+    mutate(resid_plot = map(Species, make_resid_plot))
+```
+
+```{r}
+with(
+    resid_plots,
+    walk2(
+        Species, resid_plot,
+        ~ ggsave(str_glue("../presentation/images/sam_yizhou_model/{.x}.png"), .y)
+    )
+)
+```
+
+```{r}
+with(
+    resid_plots,
+    walk2(
+        Species, resid_plot,
+        ~ print(.y)
+    )
+)
 ```
