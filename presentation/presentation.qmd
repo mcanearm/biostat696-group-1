@@ -1,10 +1,11 @@
 ---
 title: "US Bat Counts"
-format:
-    revealjs:
-        theme: serif
-        embed-resources: true
-    
+format: pdf
+# format:
+#     revealjs:
+#         theme: serif
+#         embed-resources: true
+#     
 bibliography: references.bib
 author: 
     - Yizhou Gu
@@ -130,7 +131,7 @@ Let $C_\theta$ represent the standard exponential kernel.
 ## Spatial Linear Model - Performance
 
 - Variogram of residuals still has some remaining spatial variation
-- Confirmed by Moran's I-test (0.39, $p \approx 0$).
+- Spatial Variation is no longer significant by Moran's I test (p-value $\approx 0.57$)
 
 ![](./images/three_species_model/residual_variogram.png){fig-align="center"}
 
@@ -142,6 +143,12 @@ Let $C_\theta$ represent the standard exponential kernel.
 ## Spatial Linear Model - Spatial Effects
 
 ![](./images/three_species_model/estimated_spatial_effects.png)
+
+
+## National Prediction
+
+![Log(detctions/Night) for each of the three species. Largest estimated effects are difficult to see, but present in Michigan mitten - blank points are water](./images/three_species_model/log_detections_national.png)
+
 
 ## Alt. Coordinate System
 
@@ -250,6 +257,7 @@ Priors:
 
 ![](./images/victor/PERSUB.png)
 
+
 # Future Work
 
 ## Potential New Covariates
@@ -257,7 +265,6 @@ Priors:
 - Urban/rural
 - Agricultural Outputs
 - Land Use
-- TODO: Add raster for estimated spatial effects across US including use of distance to water, and for each species
 
 ## References
 
