@@ -1,9 +1,10 @@
 ---
 title: "US Bat Counts"
-format: pdf
-    # revealjs:
-    #     theme: serif
-    #     embed-resources: true
+# format: pdf
+format:
+    revealjs:
+        theme: serif
+        embed-resources: true
     
 bibliography: references.bib
 author: 
@@ -139,6 +140,12 @@ csl: diabetologia.csl
 ## Three-Species Model - Spatial Effects
 
 ![](./images/three_species_model/estimated_spatial_effects.png)
+
+
+## National Prediction
+
+![Log(detctions/Night) for each of the three species. Largest estimated effects are difficult to see, but present in Michigan mitten - blank points are water](./images/three_species_model/log_detections_national.png)
+
 
 ## Alt. Coordinate System
 

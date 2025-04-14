@@ -188,6 +188,10 @@ plot(samples$p.theta.recover.samples)
 head(samples$p.beta.recover.samples)
 ```
 
+```{r}
+plot(samples$p.beta.recover.samples[, c(2:3)])
+
+```
 
 ```{r}
 spDiag(samples)
@@ -257,11 +261,8 @@ ggplot(data=residual_plot_data) +
 ```
 
 
-```{r full_grid_effects_EPTFUS}
+```{r full_grid_effects}
 full_grid <- read.csv("../data/data/prediction_grid.csv")
-
-water_center <- attr(model_df$dist_to_water, "scaled:center")
-water_scale <- attr(model_df$dist_to_water, "scaled:scale")
 
 # scale the full grid data
 full_grid$water_dist <- scale(
@@ -289,62 +290,62 @@ scaled_grid <- scale(
     scales
 )
 
-pred.covars <- cbind('intercept' = 1, dist_to_water=scaled_grid[, "water_dist"], "LASNOC"=0, "PERSUB"=0)
-
+pred.covars <- cbind('intercept' = 1, dist_to_water=scaled_grid[, "water_dist"], "LASNOC"=0, "PERSUB"=1)
 grid_predictions <- spPredict(
     spatial_lm,
     pred.covars = pred.covars,
     pred.coords = scaled_grid[, c("lat", "lon")],
     n.omp.threads = 8,
-    start = 10000
+    start = 11501,
+    end=12000
 )
+persub_preds <- rowMeans(grid_predictions$p.y.predictive.samples)
+
+pred.covars <- cbind('intercept' = 1, dist_to_water=scaled_grid[, "water_dist"], "LASNOC"=0, "PERSUB"=0)
+eptfus_preds <- spPredict(
+    spatial_lm,
+    pred.covars = pred.covars,
+    pred.coords = scaled_grid[, c("lat", "lon")],
+    n.omp.threads = 8,
+    start = 11501,
+    end=12000
+)
+eptfus_hat <- rowMeans(eptfus_preds$p.y.predictive.samples)
+
+pred.covars <- cbind('intercept' = 1, dist_to_water=scaled_grid[, "water_dist"], "LASNOC"=1, "PERSUB"=0)
+lasnoc_preds <- spPredict(
+    spatial_lm,
+    pred.covars = pred.covars,
+    pred.coords = scaled_grid[, c("lat", "lon")],
+    n.omp.threads = 8,
+    start = 11501,
+    end=12000
+)
+lasnoc_hat <- rowMeans(lasnoc_preds$p.y.predictive.samples)
 
 ```
 
 
-```{r}
-y_preds = rowMeans(grid_predictions$p.y.predictive.samples)
-full_grid$predictions <- y_preds
 
-ggplot(data=full_grid) +
-    # geom_sf(data = michiganplus) + 
-    # facet_wrap(~ Species, ncol=3) + 
-    geom_tile(aes(x=lon, y=lat, fill=predictions), width=0.25, height=0.25) +
-    theme(legend.position = "right") +
+
+```{r, fig.height=5, fig.width=16}
+raw_lat <- scaled_grid[, "lat"] * scales[1] + centers[1]
+raw_lon <- scaled_grid[, "lon"] * scales[2] + centers[2]
+
+plot_data <- rbind(
+    cbind.data.frame("lat"=raw_lat, "lon"=raw_lon, species="EPTFUS", "y_hat"=eptfus_hat),
+    cbind.data.frame("lat"=raw_lat, "lon"=raw_lon, species="PERSUB", "y_hat"=persub_preds),
+    cbind.data.frame("lat"=raw_lat, "lon"=raw_lon, species="LASNOC", "y_hat"=lasnoc_hat)
+)
+
+# plot_data
+ggplot(data=plot_data) +
+    facet_wrap(~ species, ncol=3) +
+    geom_tile(aes(x=lon, y=lat, fill=y_hat)) +
+    theme(legend.position = "bottom", axis.title=element_blank()) +
     coord_sf(ylim = c(25, 49), xlim = c(-70, -105)) +
     scale_fill_viridis_c() +
-    ggtitle("Log Detections / Night")
-
+    ggtitle("Log Detections / Night") +
+    geom_sf(data = michiganplus, alpha=0.1) 
 
 ```
-
-
-```{r LANSOC}
-eptfus_pred.covars <- cbind('intercept' = 1, dist_to_water=scaled_grid[, "water_dist"], "LASNOC"=0, "PERSUB"=0)
-lansoc_pred.covars <- cbind('intercept' = 1, dist_to_water=scaled_grid[, "water_dist"], "LASNOC"=1, "PERSUB"=0)
-persub_pred.covars <- cbind('intercept' = 1, dist_to_water=scaled_grid[, "water_dist"], "LASNOC"=0, "PERSUB"=1)
-
-all_pred_covars <- rbind(eptfus_pred.covars, lansoc_pred.covars, persub_pred.covars)
-
-all_coords <- rbind(
-    scaled_gird[, c("lat", "lon")],
-    scaled_gird[, c("lat", "lon")],
-    scaled_gird[, c("lat", "lon")]
-)
-
-all_species <- c(
-    rep("EPTFUS", nrow(scaled_grid)),
-    rep("LASNOC", nrow(scaled_grid)),
-    rep("PERSUB", nrow(scaled_grid))
-)
-
-grid_predictions <- spPredict(
-    spatial_lm,
-    pred.covars = all_pred_covars,
-    pred.coords = all_coords,
-    n.omp.threads = 8,
-    start = 10000
-)
-```
-
-
