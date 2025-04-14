@@ -1,10 +1,10 @@
 ---
 title: "US Bat Counts"
 format: pdf
-# format:
-#     revealjs:
-#         theme: serif
-#         embed-resources: true
+#format:
+#    revealjs:
+#        theme: serif
+#        embed-resources: true
 
 bibliography: references.bib
 author: 
@@ -100,8 +100,8 @@ csl: diabetologia.csl
     - Species
     
 \begin{align*}
-    Y_i &= X_i^\top \beta + \epsilon_i \\ 
-    \epsilon_i &\sim N(0, \sigma^2)
+    Y &= X\beta + \epsilon \\ 
+    \epsilon &\sim N(0, \sigma^2 I_n)
 \end{align*}
     
 ## Non-Spatial Linear Model - Residuals
@@ -197,6 +197,20 @@ Let $C_\theta$ represent the standard exponential kernel.
 
 ![](./images/sam_yizhou_model/sam_yizhou_residual_densities.png)
 
+## Alt. Coordinate System - Residual Map for EPTFUS
+
+![](./images/sam_yizhou_model/EPTFUS.png)
+
+
+## Alt. Coordinate System - Residual Map for LASNOC
+
+![](./images/sam_yizhou_model/LASNOC.png)
+
+
+## Alt. Coordinate System - Residual Map for PERSUB
+
+![](./images/sam_yizhou_model/PERSUB.png)
+
 ## Alt. Coordinate System - Spatial Effects
 
 ![](./images/sam_yizhou_model/sam_yizhou_estimated_spatial_effects.png)
@@ -268,10 +282,13 @@ Priors:
 
 # Research Questions
 
+## Research Questions
 - Do the counts of bats vary geographically?
     - Yes! Areas with more water bodies, especially near the Great Lakes, seem to have higher counts of bats overall. Inland, there seem to be lower counts, but data sparsity could be playing a role.
 - Do the counts of bats vary by species?
     - Yes! Our data see noticeable differences in these three species generally, which is to be expected based solely on species factors.
+    
+## Research Questions (con.)
 - How does distance to water affect these measurements?
     - Bat counts decrease negatively as distance to water increases, and our models found stable estimates on this coefficient.
 - Is it better to consider distance to water a covariate or a coordinate?
