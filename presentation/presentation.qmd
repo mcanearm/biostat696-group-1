@@ -5,7 +5,7 @@ format: pdf
 #     revealjs:
 #         theme: serif
 #         embed-resources: true
-#     
+
 bibliography: references.bib
 author: 
     - Yizhou Gu
@@ -23,17 +23,22 @@ csl: diabetologia.csl
 - Bats are an essential organism in North American ecosystems
 - Insect control; pollination; seed dispersal
 - Bat populations face threats from habitat loss, climate change, and white nose-syndrome [@noauthor_white-nose_nodate].
+- Bat capture is often done through mist-netting; utilizing acoustic monitoring data more effectively could reduce the need for this method for individual bats
 
 
-## Dataset - USFWS Great Lakes and Upper Midwest Acoustic Acoustic Bat Dataset [@noauthor_usfws_2019]
+## Dataset 
 
-- Nightly counts from acoustic monitoring stations in upper Midwest (and Texas, Iowa, and Pennsylvania)
-- 14 Eligible species of bats
+- USFWS Great Lakes and Upper Midwest Acoustic Acoustic Bat Dataset [@noauthor_usfws_2019]
+- Nightly counts of 14 species from acoustic monitoring stations in upper Midwest (and Texas, Iowa, and Pennsylvania)
+- Each bat species has its own ultrasonic frequency that can be used to distinguish it from other species
 
-![Example acoustic monitoring station at Fort Union Trading Post National Historic Site, South Dakota.](./images/bat_station.jpg)
+## What is a "station"?
+
+![Example acoustic monitoring station at Fort Union Trading Post National Historic Site, South Dakota.[@noauthor_bat_nodate]](./images/bat_station.jpg)
 
 
 ## Species
+
 - EPTFUS: big brown bat (Eptesicus fuscus)
 - LASBOR: eastern red bat (Lasiurus borealis) 
 - LASCIN: hoary bat (Lasiurus cinereus) 
@@ -51,10 +56,9 @@ csl: diabetologia.csl
 - CORRAF: Rafinesque's big-eared bat (Corynorhinus rafinesquii) 
 - LASINT: northern yellow bat (Lasiurus intermedius) 
 
-
 ## Research Questions
 
-- Do the counts of bats vary geographically?
+- How do bat counts vary geographically?
 - Do the counts of bats vary by species?
 - How does distance to water affect these measurements?
 - Is it better to consider distance to water a covariate or a coordinate?
@@ -64,7 +68,7 @@ csl: diabetologia.csl
 - First, find closest bodies of water from all bodies of water via two sources: @noauthor_north_nodate @noauthor_usa_nodate
 - For each year and species, sum detections
 - ~3,300 total_records, several replicates across years at each of 273 stations
-- Reduce the total number of records if summarizing across years
+- Reduce the total number of records by summarizing across years
 
 ## All Water Bodies
 ![](./images/water.png){fig-align="center" width="100%"}
@@ -127,6 +131,10 @@ Let $C_\theta$ represent the standard exponential kernel.
 
 ![](./images/three_species_model/traceplots.png){fig-align="center"}
 
+## 
+
+![Traceplots of GP hyperparameters using Lat/Long coordinate system.](./images/three_species_model/gp_params.png)
+
 
 ## Spatial Linear Model - Performance
 
@@ -147,7 +155,7 @@ Let $C_\theta$ represent the standard exponential kernel.
 
 ## National Prediction
 
-![Log(detctions/Night) for each of the three species. Largest estimated effects are difficult to see, but present in Michigan mitten - blank points are water](./images/three_species_model/log_detections_national.png)
+![Log(detctions/Night) for each of the three species. Largest estimated effects are difficult to see, but present in Michigan mitten.](./images/three_species_model/log_detections_national.png)
 
 
 ## Alt. Coordinate System
@@ -155,6 +163,7 @@ Let $C_\theta$ represent the standard exponential kernel.
 - Now use (latitude, distance to water) as spatial coordinates
 - Normalize latitude and distance to water using z-score standardization to ensure similar scaling
 - Fit on three selected species
+- This new coordinate system may explain spatial patterns more cleanly than traditional lat/long since nearly all of our data is on the shores of the Great Lakes
 
 ## Alt. Coordinate System - Specification
 
@@ -257,14 +266,26 @@ Priors:
 
 ![](./images/victor/PERSUB.png)
 
+# Research Questions
+
+- Do the counts of bats vary geographically?
+    - Yes! Areas with more water bodies, especially near the Great Lakes, seem to have higher counts of bats overall. Inland, there seem to be lower counts, but data sparsity could be playing a role.
+- Do the counts of bats vary by species?
+    - Yes! Our data see noticeable differences in these three species generally, which is to be expected based solely on species factors.
+- How does distance to water affect these measurements?
+    - Bat counts decrease negatively as distance to water increases, and our models found stable estimates on this coefficient.
+- Is it better to consider distance to water a covariate or a coordinate?
+    - Debateable, but by considering it as a covariate and not as a coordinate, we reduced the spatial dependence in our residuals.
+
 
 # Future Work
 
 ## Potential New Covariates
 
 - Urban/rural
-- Agricultural Outputs
-- Land Use
+- Agricultural Outputs / Land Use
+- Multivariate Output
+- Consider time component
 
 ## References
 
