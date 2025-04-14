@@ -1,10 +1,11 @@
 ---
 title: "US Bat Counts"
-format: pdf
-#format:
-#    revealjs:
-#        theme: serif
-#        embed-resources: true
+# format: pdf
+format:
+    revealjs:
+        theme: serif
+        embed-resources: true
+
 
 bibliography: references.bib
 author: 
@@ -283,17 +284,22 @@ Priors:
 # Research Questions
 
 ## Research Questions
+
 - Do the counts of bats vary geographically?
-    - Yes! Areas with more water bodies, especially near the Great Lakes, seem to have higher counts of bats overall. Inland, there seem to be lower counts, but data sparsity could be playing a role.
+    - Yes! Areas with more water bodies, especially near the Great Lakes, seem to have higher counts of bats overall. 
+    - Inland, there seem to be lower counts, but data sparsity could be playing a role.
+    
+## Resarch Questions (con.)
 - Do the counts of bats vary by species?
-    - Yes! Our data see noticeable differences in these three species generally, which is to be expected based solely on species factors.
+    - Yes! Our models detect noticeable differences in these three species generally.
+    - The relationship of geography by count does not vary much by species, but this is probably due to our stationary kernel.
     
 ## Research Questions (con.)
 - How does distance to water affect these measurements?
     - Bat counts decrease negatively as distance to water increases, and our models found stable estimates on this coefficient.
 - Is it better to consider distance to water a covariate or a coordinate?
     - Debateable, but by considering it as a covariate and not as a coordinate, we reduced the spatial dependence in our residuals.
-
+    
 
 # Future Work
 
@@ -303,6 +309,7 @@ Priors:
 - Agricultural Outputs / Land Use
 - Multivariate Output
 - Consider time component
+- Nonstationary kernels
 
 ## References
 
